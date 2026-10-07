@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LyricLine } from '../lyrics/lrc'
 import { isSung, type Section } from '../lyrics/sections'
 import type { HideLevel } from '../practice/mask'
@@ -33,6 +33,8 @@ interface Props {
   onSectionLoop: (sectionIndex: number) => void
   /** Test mode: words are blurred and learned sections fold away. */
   test: TestModeProps | null
+  /** Shown after the last line (e.g. when the lyrics end before the song does). */
+  endNotice?: ReactNode
 }
 
 export interface TestModeProps {
@@ -178,6 +180,7 @@ export function LyricsPane(props: Props) {
             </div>
           )
         })}
+        {props.endNotice}
         <div className="lyrics-pad" />
       </div>
       {synced && !following && currentLine >= 0 && (

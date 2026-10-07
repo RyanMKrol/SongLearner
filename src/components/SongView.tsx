@@ -10,7 +10,7 @@ import {
   useRomaji,
   type RomajiMode,
 } from '../hooks'
-import { lineIndexAt, parseLyrics } from '../lyrics/lrc'
+import { appendRepeat, lineIndexAt, parseLyrics } from '../lyrics/lrc'
 import type { LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
 import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
@@ -20,6 +20,7 @@ import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { log, logDebug } from '../log'
 import { playerController, type PlayerTrack } from '../spotify/player'
+import { EndOfLyrics } from './EndOfLyrics'
 import { LyricsPane } from './LyricsPane'
 import { PasteDialog, ReadingDialog, VersionsDialog } from './LyricsDialogs'
 import { PerformanceView } from './PerformanceView'
@@ -142,6 +143,52 @@ export function SongView({ track }: { track: PlayerTrack }) {
     [track.name, track.artists, track.album, lines, updatePrefs],
   )
   /** Sets how a word is sung in this song, or null to go back to the dictionary reading. */
+  // Lyric files often stop before the song does (an outro that repeats an earlier part).
+  const lastLyricMs = synced ? (lines.at(-1)?.timeMs ?? 0) : 0
+  const lyricsEndSongMs = lastLyricMs - offset
+  const [undoAddition, setUndoAddition] = useState<SavedLyrics | null>(null)
+  const showEndNotice =
+    synced && sections.length > 0 && (track.durationMs - lyricsEndSongMs > 25000 || undoAddition !== null)
+
+  const addRepeat = (sectionIndex: number) => {
+    const section = sections[sectionIndex]
+    if (!section || !saved) return
+    const at = playerController.clock.position() + offset
+    const text = appendRepeat(lines, section.startLine, section.endLine, at)
+    if (!text) return
+    log('lyrics', 'added a repeat at the end', {
+      section: sectionIndex,
+      atMs: Math.round(at),
+      lines: section.endLine - section.startLine + 1,
+    })
+    const label = saved.label.endsWith(' + your additions') ? saved.label : `${saved.label} + your additions`
+    setUndoAddition(saved)
+    replace({ ...saved, text, label })
+    const firstNewLine = lines.length
+    const newKey = lyricsKey(text)
+    updatePrefs((p) => ({
+      ...p,
+      // Lines are only added at the end, so existing sections and ratings still line up.
+      sectionStarts: p.sectionStarts ? [...p.sectionStarts, firstNewLine] : undefined,
+      // The repeat adds no new words, so Claude's check still applies.
+      aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: newKey } : p.aiReview,
+    }))
+  }
+
+  const undoAdd = () => {
+    if (!undoAddition) return
+    log('lyrics', 'undid the last addition')
+    const previousKey = lyricsKey(undoAddition.text)
+    const previousLines = parseLyrics(undoAddition.text).lines.length
+    replace(undoAddition)
+    setUndoAddition(null)
+    updatePrefs((p) => ({
+      ...p,
+      sectionStarts: p.sectionStarts?.filter((i) => i < previousLines),
+      aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: previousKey } : p.aiReview,
+    }))
+  }
+
   const saveReading = useCallback(
     (word: RomajiWord, reading: string | null) => {
       updatePrefs((p) => {
@@ -567,6 +614,17 @@ export function SongView({ track }: { track: PlayerTrack }) {
               fixReadings={fixReadings && romajiLines !== null}
               onWordClick={setFixingWord}
               onChooseReading={saveReading}
+              endNotice={
+                showEndNotice && !testMode ? (
+                  <EndOfLyrics
+                    endsAtMs={lyricsEndSongMs}
+                    durationMs={track.durationMs}
+                    sections={displaySections}
+                    onAdd={addRepeat}
+                    onUndo={undoAddition ? undoAdd : null}
+                  />
+                ) : null
+              }
               romajiMode={romajiMode}
               currentLine={currentLine}
               hideFor={hideFor}

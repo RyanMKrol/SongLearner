@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
+import { appendRepeat, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
 import { cleanTrackName, pickBest, type LrclibRecord } from '../lyrics/lrclib'
 import { autoSectionStarts, buildSections, sectionTimings } from '../lyrics/sections'
 
@@ -158,5 +158,26 @@ describe('lrclib helpers', () => {
 
   it('returns null when nothing has lyrics', () => {
     expect(pickBest([record({ plainLyrics: null })], 200_000)).toBeNull()
+  })
+})
+
+describe('appendRepeat', () => {
+  const { lines } = parseLrc(SONG)
+
+  it('copies a section to the end with the same spacing', () => {
+    // The chorus is lines 4-7 (22s, 25s, 28s, 31s); repeat it from 95s.
+    const text = appendRepeat(lines, 4, 7, 95000)
+    const after = parseLrc(text ?? '').lines
+    expect(after.length).toBe(lines.length + 4)
+    expect(after.slice(0, lines.length)).toEqual(lines)
+    expect(after.slice(-4).map((l) => [l.timeMs, l.text])).toEqual(
+      lines.slice(4, 8).map((l, i) => [95000 + i * 3000, l.text]),
+    )
+    expect(after.at(-4)?.stanzaBreakBefore).toBe(true)
+  })
+
+  it('refuses positions before the last line, and untimed lyrics', () => {
+    expect(appendRepeat(lines, 4, 7, 60000)).toBeNull()
+    expect(appendRepeat(parsePlain('a\nb').lines, 0, 1, 99999)).toBeNull()
   })
 })

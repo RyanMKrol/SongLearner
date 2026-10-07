@@ -127,3 +127,23 @@ export function lineIndexAt(lines: LyricLine[], timeMs: number): number {
   }
   return found
 }
+
+/**
+ * Copies lines `fromLine`..`toLine` to the end of the lyrics, with the first copy at `atMs` and the
+ * same spacing as the original. For songs whose lyric file stops before the singing does, which
+ * usually means an outro that repeats an earlier part. Returns the new LRC, or null if the lyrics
+ * aren't timed or `atMs` isn't after the last line.
+ */
+export function appendRepeat(lines: LyricLine[], fromLine: number, toLine: number, atMs: number): string | null {
+  if (lines.some((l) => l.timeMs === null)) return null
+  const timed = lines as (LyricLine & { timeMs: number })[]
+  const last = timed.at(-1)?.timeMs ?? 0
+  const base = timed[fromLine]?.timeMs
+  if (base === undefined || atMs <= last) return null
+  const copies = timed.slice(fromLine, toLine + 1).map((line, i) => ({
+    timeMs: Math.round(atMs + (line.timeMs - base)),
+    text: line.text,
+    stanzaBreakBefore: i === 0,
+  }))
+  return toLrc([...timed, ...copies])
+}
