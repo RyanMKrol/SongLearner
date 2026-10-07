@@ -3,7 +3,8 @@ import type { LyricLine } from '../lyrics/lrc'
 import { isSung, type Section } from '../lyrics/sections'
 import type { HideLevel } from '../practice/mask'
 import type { Mastery } from '../practice/storage'
-import { LyricText } from './LyricText'
+import type { RomajiMode } from '../hooks'
+import { LyricWithRomaji } from './LyricText'
 
 interface Props {
   lines: LyricLine[]
@@ -12,6 +13,9 @@ interface Props {
   currentLine: number
   hideFor: (lineIndex: number) => HideLevel
   peek: boolean
+  /** Romaji per line for Japanese lyrics, once it's ready. */
+  romaji: (string | null)[] | null
+  romajiMode: RomajiMode
   /** Lines being practised right now; everything else is dimmed. */
   activeLines: { from: number; to: number } | null
   selection: { from: number; to: number } | null
@@ -117,7 +121,19 @@ export function LyricsPane(props: Props) {
                     {section ? '✂ starts here' : '✂'}
                   </span>
                 )}
-                {sung ? <LyricText text={line.text} level={props.hideFor(i)} peek={props.peek} /> : '♪'}
+                {sung ? (
+                  <span className="line-text">
+                  <LyricWithRomaji
+                    text={line.text}
+                    romaji={props.romaji?.[i]}
+                    mode={props.romajiMode}
+                    level={props.hideFor(i)}
+                    peek={props.peek}
+                  />
+                  </span>
+                ) : (
+                  '♪'
+                )}
               </div>
             </div>
           )

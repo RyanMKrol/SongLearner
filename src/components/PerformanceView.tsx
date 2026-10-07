@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { usePlayer, usePosition, useDerivedFromPosition } from '../hooks'
+import { usePlayer, usePosition, useDerivedFromPosition, type RomajiMode } from '../hooks'
 import { lineIndexAt, type LyricLine } from '../lyrics/lrc'
 import { isSung } from '../lyrics/sections'
 import type { HideLevel } from '../practice/mask'
 import { playerController } from '../spotify/player'
-import { LyricText } from './LyricText'
+import { LyricWithRomaji } from './LyricText'
 
 /** Full-screen, distraction-free view for singing the whole song through. */
 export function PerformanceView({
@@ -13,6 +13,8 @@ export function PerformanceView({
   durationMs,
   hideFor,
   peek,
+  romaji,
+  romajiMode,
   onClose,
 }: {
   lines: LyricLine[]
@@ -20,6 +22,8 @@ export function PerformanceView({
   durationMs: number
   hideFor: (lineIndex: number) => HideLevel
   peek: boolean
+  romaji: (string | null)[] | null
+  romajiMode: RomajiMode
   onClose: () => void
 }) {
   const player = usePlayer()
@@ -39,6 +43,10 @@ export function PerformanceView({
     }
   }, [onClose])
 
+  const show = (i: number) => (
+    <LyricWithRomaji text={lines[i].text} romaji={romaji?.[i]} mode={romajiMode} level={hideFor(i)} peek={peek} />
+  )
+
   const sungAfter = (from: number, count: number) => {
     const out: number[] = []
     for (let i = from + 1; i < lines.length && out.length < count; i++) if (isSung(lines[i])) out.push(i)
@@ -57,14 +65,14 @@ export function PerformanceView({
     <div className="performance" onDoubleClick={onClose}>
       <div className="performance-lines">
         <div className="perf-prev">
-          {previous !== null && <LyricText text={lines[previous].text} level={hideFor(previous)} peek={peek} />}
+          {previous !== null && show(previous)}
         </div>
         <div className={`perf-current ${main === null ? 'is-waiting' : ''}`}>
-          {main !== null ? <LyricText text={lines[main].text} level={hideFor(main)} peek={peek} /> : '♪'}
+          {main !== null ? show(main) : '♪'}
         </div>
         {upcoming.map((i, k) => (
           <div key={i} className={k === 0 ? 'perf-next' : 'perf-later'}>
-            <LyricText text={lines[i].text} level={hideFor(i)} peek={peek} />
+            {show(i)}
           </div>
         ))}
       </div>

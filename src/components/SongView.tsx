@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { isTyping, useDerivedFromPosition, useKeyHeld, useLyrics, usePlayer, usePractice } from '../hooks'
+import {
+  isTyping,
+  useDerivedFromPosition,
+  useKeyHeld,
+  useLyrics,
+  usePlayer,
+  usePractice,
+  useRomaji,
+  type RomajiMode,
+} from '../hooks'
 import { lineIndexAt, parseLyrics } from '../lyrics/lrc'
 import type { LrclibRecord } from '../lyrics/lrclib'
-import { autoSectionStarts, buildSections, isSung, sectionTimings, type Section } from '../lyrics/sections'
+import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, type Section } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
@@ -36,6 +45,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const [editSplits, setEditSplits] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
   const peek = useKeyHeld('h')
+  const [romajiMode, setRomajiMode] = useLocalSetting<RomajiMode>('romaji', 'below')
   const offset = prefs.offsetMs
 
   useEffect(() => {
@@ -58,6 +68,17 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const sections = useMemo(
     () => buildSections(lines, prefs.sectionStarts ?? autoSectionStarts(lines), prefs.sectionNames),
     [lines, prefs.sectionStarts, prefs.sectionNames],
+  )
+  const romaji = useRomaji(lines)
+  const romajiLines = romajiMode === 'off' ? null : romaji.lines
+  /** Sections as shown: unnamed sections take their label from the romaji when there is some. */
+  const displaySections = useMemo(
+    () =>
+      sections.map((s) => {
+        const r = romajiLines?.[s.startLine]
+        return r && !prefs.sectionNames[s.startLine] ? { ...s, name: truncate(r, 34) } : s
+      }),
+    [sections, romajiLines, prefs.sectionNames],
   )
   const timings = useMemo(
     () => (synced ? sectionTimings(sections, lines, track.durationMs) : sections.map(() => null)),
@@ -309,7 +330,9 @@ export function SongView({ track }: { track: PlayerTrack }) {
             <LyricsPane
               lines={lines}
               synced={synced}
-              sections={sections}
+              sections={displaySections}
+              romaji={romajiLines}
+              romajiMode={romajiMode}
               currentLine={currentLine}
               hideFor={hideFor}
               peek={peek}
@@ -342,7 +365,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
 
         {sections.length > 0 && (
           <SectionPanel
-            sections={sections}
+            sections={displaySections}
             timings={timings}
             synced={synced}
             selection={selection}
@@ -398,6 +421,32 @@ export function SongView({ track }: { track: PlayerTrack }) {
               </button>
             )}
           </div>
+          {romaji.available && (
+            <div className="romaji-row">
+              <span className="small">Romaji</span>
+              <span className="segmented" role="group" aria-label="Romaji display">
+                {(
+                  [
+                    ['below', 'Under the lyrics'],
+                    ['only', 'Romaji only'],
+                    ['off', 'Off'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    className={`btn btn-small ${romajiMode === mode ? 'is-active' : ''}`}
+                    onClick={() => setRomajiMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </span>
+              {romajiMode !== 'off' && romaji.loading && (
+                <span className="muted small">Loading the Japanese dictionary (about 17MB, first time only)…</span>
+              )}
+              {romaji.error && <span className="error-text small">Couldn&apos;t make romaji: {romaji.error}</span>}
+            </div>
+          )}
           {saved && (
             <p className="muted small">
               {saved.source === 'user' ? 'Added by you' : saved.label} · {synced ? 'timed' : 'not timed'}
@@ -432,12 +481,15 @@ export function SongView({ track }: { track: PlayerTrack }) {
       {overlay === 'tapsync' && (
         <TapSync
           lines={lines.filter(isSung)}
+          romaji={romajiLines && lines.flatMap((l, i) => (isSung(l) ? [romajiLines[i]] : []))}
           onClose={closeOverlay}
           onSave={(lrc) => applyLyrics({ text: lrc, synced: true, source: 'user', label: 'Timed by you' })}
         />
       )}
       {overlay === 'performance' && (
         <PerformanceView
+          romaji={romajiLines}
+          romajiMode={romajiMode}
           lines={lines}
           offsetMs={offset}
           durationMs={track.durationMs}

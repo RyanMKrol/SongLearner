@@ -108,7 +108,7 @@ function similarity(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared)
 }
 
-function truncate(text: string, max: number): string {
+export function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
 }
 

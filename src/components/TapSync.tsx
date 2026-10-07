@@ -12,10 +12,13 @@ const REACTION_MS = 120
  */
 export function TapSync({
   lines,
+  romaji,
   onSave,
   onClose,
 }: {
   lines: LyricLine[]
+  /** Romaji for each of `lines`, shown underneath so Japanese lines can be followed. */
+  romaji?: (string | null)[] | null
   onSave: (lrc: string) => void
   onClose: () => void
 }) {
@@ -79,6 +82,19 @@ export function TapSync({
   }
 
   const current = taps.length
+  const text = (i: number) => {
+    const line = lines[i]
+    if (!line) return ' '
+    const r = romaji?.[i]
+    return r ? (
+      <>
+        {line.text}
+        <span className="romaji">{r}</span>
+      </>
+    ) : (
+      line.text
+    )
+  }
   return (
     <div className="overlay">
       <div className="tapsync">
@@ -104,10 +120,10 @@ export function TapSync({
               {formatTime(position)} · line {Math.min(current + 1, lines.length)} of {lines.length}
             </div>
             <div className="tapsync-lines">
-              <div className="tapsync-prev">{current > 0 ? lines[current - 1].text : ' '}</div>
-              <div className="tapsync-current">{done ? 'All lines timed!' : lines[current].text}</div>
-              <div className="tapsync-next">{lines[current + 1]?.text ?? ' '}</div>
-              <div className="tapsync-next faint">{lines[current + 2]?.text ?? ' '}</div>
+              <div className="tapsync-prev">{current > 0 ? text(current - 1) : ' '}</div>
+              <div className="tapsync-current">{done ? 'All lines timed!' : text(current)}</div>
+              <div className="tapsync-next">{text(current + 1)}</div>
+              <div className="tapsync-next faint">{text(current + 2)}</div>
             </div>
             <div className="tapsync-actions">
               {done ? (

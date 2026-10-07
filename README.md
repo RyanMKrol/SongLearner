@@ -23,6 +23,11 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - If LRCLIB only has untimed lyrics, or nothing at all, you can paste lyrics in and time them
   yourself by tapping Space at the start of each line while the song plays.
 - A timing slider fixes lyrics that run slightly early or late.
+- Japanese lyrics get romaji, either under each line or instead of it, so you can sing songs
+  without reading kanji. It works out readings with [kuromoji](https://github.com/sglkc/kuromoji.js)
+  and spells them out with [wanakana](https://wanakana.com). The dictionary (about 17MB) only
+  downloads the first time a Japanese song is opened. Readings are usually right but not always,
+  especially for names and unusual kanji.
 
 Everything you set up (sections, ratings, timing tweaks, lyrics) is saved in your browser's local
 storage.
@@ -83,7 +88,9 @@ npm run build    # type-check and production build
 The code is split by concern:
 
 - `src/spotify/`: login (PKCE), the Web API calls, and the Web Playback SDK wrapper.
-- `src/lyrics/`: the LRC parser, the LRCLIB client, and section detection.
+- `src/lyrics/`: the LRC parser, the LRCLIB client, section detection, and romaji.
+- `scripts/copy-kuromoji-dict.mjs`: copies the Japanese dictionary into `public/` before
+  `dev` and `build` (it isn't committed).
 - `src/playback/`: the playback clock (smooths position between SDK updates) and the loop
   controller, which decides when to jump back during practice.
 - `src/practice/`: memorise-mode masking and local storage.

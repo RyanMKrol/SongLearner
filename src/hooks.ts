@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { LyricLine } from './lyrics/lrc'
 import { findLyrics } from './lyrics/lrclib'
+import { hasJapanese, romanizeLines } from './lyrics/romaji'
 import { LoopController, type LoopOptions, type LoopStatus, type PracticeStep } from './playback/loop'
 import { loadSavedLyrics, saveLyrics, type SavedLyrics } from './practice/storage'
 import { playerController, type PlayerTrack } from './spotify/player'
@@ -99,6 +101,49 @@ export function useLyrics(track: PlayerTrack) {
 
   const value = state?.key === key ? state.value : initial
   return { state: value, replace, refetch }
+}
+
+export type RomajiMode = 'below' | 'only' | 'off'
+
+export interface RomajiState {
+  /** True when any line contains Japanese. */
+  available: boolean
+  loading: boolean
+  error: string | null
+  /** Romaji per line (null for lines with no Japanese), once ready. */
+  lines: (string | null)[] | null
+}
+
+/** Works out romaji for Japanese lyrics. The dictionary only downloads when it's needed. */
+export function useRomaji(lines: LyricLine[]): RomajiState {
+  const available = useMemo(() => lines.some((l) => hasJapanese(l.text)), [lines])
+  const [result, setResult] = useState<{
+    source: LyricLine[]
+    lines: (string | null)[] | null
+    error: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    if (!available) return
+    let cancelled = false
+    romanizeLines(lines.map((l) => l.text))
+      .then((romaji) => !cancelled && setResult({ source: lines, lines: romaji, error: null }))
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setResult({ source: lines, lines: null, error: e instanceof Error ? e.message : String(e) })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [lines, available])
+
+  const current = result?.source === lines ? result : null
+  return {
+    available,
+    loading: available && current === null,
+    error: current?.error ?? null,
+    lines: current?.lines ?? null,
+  }
 }
 
 const LOOP_TICK_MS = 30

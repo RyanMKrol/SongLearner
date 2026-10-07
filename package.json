@@ -9,11 +9,16 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "predev": "node scripts/copy-kuromoji-dict.mjs",
+    "prebuild": "node scripts/copy-kuromoji-dict.mjs",
+    "prepreview": "node scripts/copy-kuromoji-dict.mjs"
   },
   "dependencies": {
+    "@sglkc/kuromoji": "^1.1.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "wanakana": "^5.3.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

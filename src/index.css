@@ -515,6 +515,51 @@ kbd {
   padding: 3px 12px;
 }
 
+.line-text {
+  display: block;
+}
+
+.romaji {
+  display: block;
+  font-size: 0.6em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+.line.is-current .romaji {
+  opacity: 0.9;
+  color: #ffd0e0;
+}
+
+.perf-current .romaji {
+  font-size: 0.55em;
+  color: #ffd0e0;
+}
+
+.tapsync-lines .romaji {
+  font-size: 0.65em;
+}
+
+.romaji-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .line.is-past {
   color: var(--text-faint);
 }
