@@ -1,6 +1,8 @@
 // LRCLIB (https://lrclib.net) is a free, community-run lyrics database with timed lyrics.
 // No API key is needed and it allows browser requests.
 
+import { log, logWarn } from '../log'
+
 const BASE = 'https://lrclib.net/api'
 const HEADERS = { 'Lrclib-Client': 'SongLearner (personal karaoke practice app)' }
 
@@ -97,18 +99,23 @@ export async function findLyrics(track: TrackQuery, signal?: AbortSignal): Promi
     )
   } catch (e) {
     if (signal?.aborted) throw e
+    logWarn('lrclib', 'exact match request failed; falling back to search', { error: e })
   }
+  log('lrclib', 'exact match', { found: Boolean(exact), id: exact?.id, synced: Boolean(exact?.syncedLyrics) })
   if (exact && (exact.syncedLyrics || exact.instrumental)) return toFound(exact)
 
   // 2. Search by track and artist. Many songs exist on several albums with the same lyrics.
   const cleaned = cleanTrackName(track.name)
   let candidates = await searchLrclib({ track_name: cleaned, artist_name: track.artist }, signal)
+  log('lrclib', 'search by track and artist', { query: cleaned, artist: track.artist, results: candidates.length })
 
   // 3. Free-text search as a last resort.
   if (candidates.length === 0) {
     candidates = await searchLrclib({ q: `${cleaned} ${track.artist}` }, signal)
+    log('lrclib', 'free-text search', { query: `${cleaned} ${track.artist}`, results: candidates.length })
   }
 
   const best = pickBest(exact ? [exact, ...candidates] : candidates, track.durationMs)
+  log('lrclib', 'picked', { id: best?.id ?? null, synced: Boolean(best?.syncedLyrics), duration: best?.duration, wanted: Math.round(track.durationMs / 1000) })
   return best ? toFound(best) : null
 }

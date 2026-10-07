@@ -7,6 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
+import { serverLog } from './logSink.ts'
 
 const MODEL = 'claude-opus-5-5'
 const MAX_REQUESTS = 6
@@ -123,6 +124,14 @@ export async function reviewReadings(client: Anthropic, req: ReviewRequest): Pro
       messages,
     })
 
+    serverLog('review', 'claude response', {
+      request: i + 1,
+      stopReason: response.stop_reason,
+      model: response.model,
+      usage: response.usage,
+      blocks: response.content.map((b) => b.type),
+      searches: response.content.filter((b) => b.type === 'server_tool_use').map((b) => (b as { input?: unknown }).input),
+    })
     if (response.stop_reason === 'refusal') {
       throw new Error('Claude declined to review this song.')
     }
@@ -196,11 +205,16 @@ export function readingReviewPlugin(apiKey: string | undefined): Plugin {
         message: 'Add ANTHROPIC_API_KEY to .env.local and restart the dev server to turn on reading checks.',
       })
     }
+    const started = Date.now()
     try {
       const body = await readJson(req)
       if (!isReviewRequest(body)) return send(res, 400, { error: 'bad_request', message: 'Malformed review request.' })
-      send(res, 200, await reviewReadings(client, body))
+      serverLog('review', 'started', { title: body.title, artist: body.artist, lines: body.lines.length, words: body.words.length })
+      const result = await reviewReadings(client, body)
+      serverLog('review', 'finished', { ms: Date.now() - started, suggestions: result.suggestions.length, notes: result.notes })
+      send(res, 200, result)
     } catch (e) {
+      serverLog('review', 'failed', { ms: Date.now() - started, error: e instanceof Error ? e.message : String(e) }, 'error')
       if (e instanceof Anthropic.AuthenticationError) {
         send(res, 401, { error: 'auth', message: 'Anthropic rejected the API key in .env.local.' })
       } else if (e instanceof Anthropic.RateLimitError) {

@@ -1,4 +1,5 @@
 // Thin wrapper over the few Spotify Web API endpoints the app needs.
+import { log, logWarn } from '../log'
 import { getAccessToken } from './auth'
 
 const API = 'https://api.spotify.com/v1'
@@ -28,6 +29,8 @@ export class SpotifyApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T | null> {
   const token = await getAccessToken()
+  const started = performance.now()
+  const method = init.method ?? 'GET'
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -36,6 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
       ...init.headers,
     },
   })
+
+  const entry = { method, path, status: res.status, ms: performance.now() - started, retried }
+  if (res.ok) log('spotify-api', 'request', entry)
+  else logWarn('spotify-api', 'request failed', { ...entry, retryAfter: res.headers.get('Retry-After') })
 
   if (res.status === 401 && !retried) {
     await getAccessToken(true)

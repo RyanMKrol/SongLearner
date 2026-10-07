@@ -18,6 +18,7 @@ import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, typ
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
+import { log, logDebug } from '../log'
 import { playerController, type PlayerTrack } from '../spotify/player'
 import { LyricsPane } from './LyricsPane'
 import { PasteDialog, ReadingDialog, VersionsDialog } from './LyricsDialogs'
@@ -222,6 +223,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
     return () => window.clearTimeout(id)
   }, [justPassed])
   const testAttempt = useTestMode(testMode && synced, songTimings, peek, onSectionPassed)
+
   const learnedCount = sections.filter((s) => prefs.mastery[s.startLine] === 3).length
 
   const startSection = useCallback(
@@ -229,7 +231,9 @@ export function SongView({ track }: { track: PlayerTrack }) {
       const t = songTimings[sectionIndex]
       if (!t) return
       playerController.activate()
-      void playerController.seek(t.startMs - settings.leadInMs).then(() => playerController.resume())
+      void playerController
+        .seek(t.startMs - settings.leadInMs, 'test: start section')
+        .then(() => playerController.resume('test: start section'))
     },
     [songTimings, settings.leadInMs],
   )
@@ -300,13 +304,14 @@ export function SongView({ track }: { track: PlayerTrack }) {
       if (t === null || t === undefined) return
       if (activeLines && (lineIndex < activeLines.from || lineIndex > activeLines.to)) stopPractice()
       playerController.activate()
-      void playerController.seek(t - offset - 500)
-      if (player.paused) void playerController.resume()
+      void playerController.seek(t - offset - 500, 'jump to line')
+      if (player.paused) void playerController.resume('jump to line')
     },
     [lines, offset, activeLines, stopPractice, player.paused],
   )
 
   const selectSection = (index: number, extend: boolean) => {
+    logDebug('song-view', 'section clicked', { index, extend })
     setSelection((prev) => {
       if (extend && prev) {
         const anchor = prev.from
@@ -354,18 +359,19 @@ export function SongView({ track }: { track: PlayerTrack }) {
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return
       const pos = playerController.clock.position()
+      if (!e.repeat) logDebug('keys', 'pressed', { key: e.key, position: Math.round(pos) })
       switch (e.key) {
         case ' ':
           e.preventDefault()
-          void playerController.togglePlay()
+          void playerController.togglePlay('key: space')
           break
         case 'ArrowLeft':
           e.preventDefault()
-          void playerController.seek(pos - 5000)
+          void playerController.seek(pos - 5000, 'key: left')
           break
         case 'ArrowRight':
           e.preventDefault()
-          void playerController.seek(pos + 5000)
+          void playerController.seek(pos + 5000, 'key: right')
           break
         case 'ArrowUp':
         case 'ArrowDown': {
@@ -431,6 +437,59 @@ export function SongView({ track }: { track: PlayerTrack }) {
     : selection && synced && songTimings[selection.from] && songTimings[selection.to]
       ? { startMs: songTimings[selection.from].startMs, endMs: songTimings[selection.to].endMs }
       : null
+
+  // --- Diagnostics -------------------------------------------------------------------------
+  // When this screen is built or torn down (a rebuild resets test mode, loops and scrolling).
+  useEffect(() => {
+    log('song-view', 'opened', { trackId: track.id, name: track.name, artists: track.artists, durationMs: track.durationMs })
+    return () => log('song-view', 'closed', { trackId: track.id })
+  }, [track.id, track.name, track.artists, track.durationMs])
+  useEffect(() => {
+    log('song-view', 'lyrics state', {
+      status: lyricsState.status,
+      synced,
+      lines: lines.length,
+      sections: sections.length,
+      customSplits: prefs.sectionStarts !== undefined,
+    })
+  }, [lyricsState.status, synced, lines.length, sections.length, prefs.sectionStarts])
+  useEffect(() => {
+    if (romaji.available) log('song-view', 'romaji state', { loading: romaji.loading, error: romaji.error, mode: romajiMode })
+  }, [romaji.available, romaji.loading, romaji.error, romajiMode])
+  useEffect(() => log('song-view', 'overlay', { overlay }), [overlay])
+  useEffect(() => log('song-view', 'test mode', { on: testMode }), [testMode])
+  useEffect(() => log('song-view', 'fix readings mode', { on: fixReadings }), [fixReadings])
+  useEffect(() => logDebug('song-view', 'peek', { held: peek }), [peek])
+  useEffect(() => {
+    if (justPassed !== null) log('song-view', 'section learned', { section: justPassed })
+  }, [justPassed])
+
+  // Every 5 seconds, a snapshot of where things stand, so the logs read as a timeline.
+  const heartbeatRef = useRef<() => Record<string, unknown>>(() => ({}))
+  useEffect(() => {
+    heartbeatRef.current = () => ({
+      position: Math.round(playerController.clock.position()),
+      playing: playerController.clock.isPlaying,
+      paused: player.paused,
+      playerStatus: player.status,
+      currentLine,
+      section: sectionOfLine(Math.max(currentLine, 0))?.index ?? null,
+      offsetMs: offset,
+      testMode,
+      testAttempt,
+      learned: learnedCount,
+      practice: practice.status
+        ? { step: practice.status.stepIndex, of: practice.status.stepCount, rep: practice.status.rep, reps: practice.status.reps }
+        : null,
+      overlay,
+      visibility: document.visibilityState,
+    })
+  })
+  useEffect(() => {
+    const id = window.setInterval(() => logDebug('heartbeat', 'tick', heartbeatRef.current()), 5000)
+    return () => window.clearInterval(id)
+  }, [])
+  // ------------------------------------------------------------------------------------------
 
   const closeOverlay = useCallback(() => setOverlay(null), [])
 

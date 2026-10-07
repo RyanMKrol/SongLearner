@@ -1,5 +1,6 @@
 // Everything the app remembers lives in localStorage, keyed by Spotify track ID.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { changedKeys, log, logWarn } from '../log'
 import type { HideLevel } from './mask'
 
 /** 0 = not started, 1 = learning, 2 = almost, 3 = know it. */
@@ -72,8 +73,9 @@ function write(key: string, value: unknown): void {
   try {
     if (value === null) localStorage.removeItem(PREFIX + key)
     else localStorage.setItem(PREFIX + key, JSON.stringify(value))
-  } catch {
+  } catch (e) {
     // Storage full or blocked. Practice still works, it just won't be remembered.
+    logWarn('storage', 'write failed', { key, error: e })
   }
 }
 
@@ -104,6 +106,21 @@ export function useTrackPrefs(trackId: string) {
       setState((prev) => {
         const base = prev.trackId === trackId ? prev.prefs : loadPrefs(trackId)
         const next = change(base)
+        const changed = changedKeys(base, next)
+        if (changed.length > 0) {
+          log('prefs', 'changed', {
+            trackId,
+            changed,
+            // Small values are useful to see directly; big ones (lyric-keyed maps) just by size.
+            values: Object.fromEntries(
+              changed.map((k) => {
+                const v = (next as unknown as Record<string, unknown>)[k]
+                const json = JSON.stringify(v) ?? ''
+                return [k, json.length <= 300 ? v : `${json.length} chars`]
+              }),
+            ),
+          })
+        }
         savePrefs(trackId, next)
         return { trackId, prefs: next }
       })
@@ -148,6 +165,11 @@ export function masterySummary(trackId: string): { known: number; total: number 
 
 export function useLocalSetting<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => read<T>(`setting:${key}`) ?? initial)
-  useEffect(() => write(`setting:${key}`, value), [key, value])
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) first.current = false
+    else log('settings', 'changed', { key, value: value as unknown })
+    write(`setting:${key}`, value)
+  }, [key, value])
   return [value, setValue] as const
 }

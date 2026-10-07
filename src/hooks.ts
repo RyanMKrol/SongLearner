@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { log, logError, logWarn } from './log'
 import type { LyricLine } from './lyrics/lrc'
 import { findLyrics } from './lyrics/lrclib'
 import { hasJapanese, romanizeLines, type ReadingFixes, type RomajiLine } from './lyrics/romaji'
@@ -58,17 +59,33 @@ export function useLyrics(track: PlayerTrack) {
   }, [track.id, reloadKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (initial.status === 'ready') return
+    if (initial.status === 'ready') {
+      log('lyrics', 'loaded from storage', { trackId: track.id, source: initial.lyrics.source, synced: initial.lyrics.synced, lrclibId: initial.lyrics.lrclibId })
+      return
+    }
     const controller = new AbortController()
+    const started = performance.now()
+    log('lyrics', 'looking up on LRCLIB', { trackId: track.id, name: track.name, artist: track.artists[0], album: track.album, durationMs: track.durationMs })
     findLyrics(
       { name: track.name, artist: track.artists[0] ?? '', album: track.album, durationMs: track.durationMs },
       controller.signal,
     )
       .then((found) => {
         if (!found) {
+          logWarn('lyrics', 'not found', { trackId: track.id, ms: performance.now() - started })
           setState({ key, value: { status: 'none' } })
           return
         }
+        log('lyrics', 'found', {
+          trackId: track.id,
+          ms: performance.now() - started,
+          lrclibId: found.record.id,
+          synced: found.synced,
+          instrumental: found.instrumental,
+          recordDuration: found.record.duration,
+          album: found.record.albumName,
+          lines: found.text.split('\n').length,
+        })
         const lyrics: SavedLyrics = {
           text: found.text,
           synced: found.synced,
@@ -82,6 +99,7 @@ export function useLyrics(track: PlayerTrack) {
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted) return
+        logError('lyrics', 'lookup failed', { trackId: track.id, error: e })
         setState({ key, value: { status: 'error', message: e instanceof Error ? e.message : String(e) } })
       })
     return () => controller.abort()
@@ -89,6 +107,7 @@ export function useLyrics(track: PlayerTrack) {
 
   const replace = useCallback(
     (lyrics: SavedLyrics) => {
+      log('lyrics', 'replaced', { trackId: track.id, source: lyrics.source, label: lyrics.label, synced: lyrics.synced, lines: lyrics.text.split('\n').length })
       saveLyrics(track.id, lyrics)
       setState({ key, value: { status: 'ready', lyrics } })
     },
@@ -96,6 +115,7 @@ export function useLyrics(track: PlayerTrack) {
   )
 
   const refetch = useCallback(() => {
+    log('lyrics', 're-download requested', { trackId: track.id })
     saveLyrics(track.id, null)
     setReloadKey((k) => k + 1)
   }, [track.id])
@@ -128,13 +148,24 @@ export function useRomaji(lines: LyricLine[], fixes: ReadingFixes): RomajiState 
   useEffect(() => {
     if (!available) return
     let cancelled = false
+    const started = performance.now()
     romanizeLines(
       lines.map((l) => l.text),
       fixes,
     )
-      .then((romaji) => !cancelled && setResult({ source: lines, fixes, lines: romaji, error: null }))
+      .then((romaji) => {
+        if (cancelled) return
+        log('romaji', 'ready', {
+          ms: performance.now() - started,
+          japaneseLines: romaji.filter(Boolean).length,
+          fixes: Object.keys(fixes).length,
+          fixedWords: romaji.reduce((n, l) => n + (l?.words.filter((w) => w.fixed).length ?? 0), 0),
+        })
+        setResult({ source: lines, fixes, lines: romaji, error: null })
+      })
       .catch((e: unknown) => {
         if (cancelled) return
+        logError('romaji', 'failed', { error: e })
         setResult({ source: lines, fixes, lines: null, error: e instanceof Error ? e.message : String(e) })
       })
     return () => {
@@ -172,28 +203,37 @@ export function usePractice() {
   }
 
   const stop = useCallback(() => {
+    if (controllerRef.current) log('practice', 'stopped', { status: controllerRef.current.status })
     controllerRef.current = null
     clearGap()
     setState({ status: null, finished: null })
   }, [])
 
   const execute = useCallback((controller: LoopController, action: ReturnType<LoopController['tick']>) => {
+    log('practice', action.type === 'finished' ? 'finished' : 'jump back', {
+      ...action,
+      position: Math.round(playerController.clock.position()),
+      step: controller.status.stepIndex,
+      rep: controller.status.rep,
+    })
     if (action.type === 'seek') {
       if (action.pauseMs > 0) {
-        void playerController.pause()
+        void playerController.pause('loop: pause between reps')
         clearGap()
         gapTimer.current = window.setTimeout(() => {
           gapTimer.current = null
           if (controllerRef.current !== controller) return
-          void playerController.seek(action.positionMs).then(() => playerController.resume())
+          void playerController
+            .seek(action.positionMs, 'loop: restart after pause')
+            .then(() => playerController.resume('loop: restart after pause'))
         }, action.pauseMs)
         // Park the clock on the restart point so the next tick doesn't see the old position.
         playerController.clock.jumpTo(action.positionMs)
       } else {
-        void playerController.seek(action.positionMs)
+        void playerController.seek(action.positionMs, 'loop: jump back')
       }
     } else if (action.type === 'finished') {
-      void playerController.pause()
+      void playerController.pause('loop: practice finished')
       const steps = controller.steps
       controllerRef.current = null
       setState({
@@ -212,9 +252,13 @@ export function usePractice() {
     (steps: PracticeStep[], options: LoopOptions) => {
       clearGap()
       const controller = new LoopController(steps, options)
+      log('practice', 'started', {
+        steps: steps.map((s) => ({ from: s.fromSection, to: s.toSection, startMs: Math.round(s.startMs), endMs: Math.round(s.endMs), reps: s.reps })),
+        ...options,
+      })
       controllerRef.current = controller
       execute(controller, controller.start(performance.now()))
-      void playerController.resume()
+      void playerController.resume('loop: start practice')
     },
     [execute],
   )
@@ -250,6 +294,7 @@ export function useTestMode(
 ): number | null {
   const trackerRef = useRef<TestTracker | null>(null)
   const onPassedRef = useRef(onPassed)
+  const peekRef = useRef(peek)
   const [attempt, setAttempt] = useState<number | null>(null)
 
   useEffect(() => {
@@ -263,19 +308,26 @@ export function useTestMode(
     }
     const tracker = new TestTracker(spans)
     trackerRef.current = tracker
+    log('test', 'tracking', { sections: spans.length })
     const id = window.setInterval(() => {
       const clock = playerController.clock
-      for (const event of tracker.tick(clock.position(), clock.isPlaying, performance.now())) {
+      const position = clock.position()
+      for (const event of tracker.tick(position, clock.isPlaying, performance.now(), peekRef.current)) {
+        log('test', `section ${event.type}`, { ...event, position: Math.round(position), span: spans[event.section] })
         if (event.type === 'passed') onPassedRef.current(event.section)
       }
       setAttempt(tracker.current)
     }, 50)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearInterval(id)
+      log('test', 'stopped tracking', { attempt: tracker.current })
+    }
   }, [enabled, spans])
 
-  // Looking at the words means this attempt doesn't count.
+  // Looking at the words means this attempt doesn't count, and none starts until you stop looking.
   useEffect(() => {
-    if (peek) trackerRef.current?.interrupt()
+    peekRef.current = peek
+    if (peek) log('test', 'peeking', { attempt: trackerRef.current?.current ?? null })
   }, [peek])
 
   return enabled ? attempt : null

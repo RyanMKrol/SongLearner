@@ -118,6 +118,23 @@ The code is split by concern:
 - `src/practice/`: memorise-mode masking and local storage.
 - `src/components/`: the React UI.
 
+## Logs
+
+While the dev server is running, the app logs nearly everything it does to `logs/<date>.jsonl`
+(one JSON object per line): player events and seeks (with what asked for them), Spotify and
+LRCLIB requests, loops, test-mode attempts and why they were cancelled, setting changes, errors,
+hot reloads, and a heartbeat every 5 seconds with the playback state. Tokens, keys and lyric text
+are never logged. The folder isn't committed.
+
+```
+npm run logs                     # timeline of the latest browser session
+npm run logs -- --sessions       # today's sessions
+npm run logs -- --session ab12cd # one session
+npm run logs -- --scope test,player --level info
+```
+
+In the browser console, `songlearnerLogs` holds the last 5000 entries.
+
 ## Limitations
 
 - Laptop browsers only for now. Spotify's Web Playback SDK doesn't run in mobile browsers.

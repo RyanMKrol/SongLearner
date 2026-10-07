@@ -25,3 +25,6 @@ dist-ssr
 
 # Copied from node_modules by scripts/copy-kuromoji-dict.mjs
 public/kuromoji-dict
+
+# Diagnostic logs written by the dev server (server/logSink.ts)
+logs/

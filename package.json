@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "predev": "node scripts/copy-kuromoji-dict.mjs",
     "prebuild": "node scripts/copy-kuromoji-dict.mjs",
-    "prepreview": "node scripts/copy-kuromoji-dict.mjs"
+    "prepreview": "node scripts/copy-kuromoji-dict.mjs",
+    "logs": "node scripts/logs.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

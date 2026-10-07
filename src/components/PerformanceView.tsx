@@ -78,7 +78,7 @@ export function PerformanceView({
         ))}
       </div>
       <div className="performance-footer">
-        <button className="btn btn-ghost" onClick={() => void playerController.togglePlay()}>
+        <button className="btn btn-ghost" onClick={() => void playerController.togglePlay('performance mode button')}>
           {player.paused ? '▶ Play' : '❚❚ Pause'}
         </button>
         <div className="perf-progress">

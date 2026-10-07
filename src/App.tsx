@@ -6,6 +6,7 @@ import { TopBar } from './components/TopBar'
 import { usePlayer } from './hooks'
 import { getProfile } from './spotify/api'
 import { AUTH_LOST_EVENT, handleCallback, hasClientId, isLoggedIn, logout } from './spotify/auth'
+import { log, logWarn } from './log'
 import { playerController } from './spotify/player'
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
       setLoginError(error)
       setLoggedIn(isLoggedIn())
       setReady(true)
+      log('app', 'started', { loggedIn: isLoggedIn(), loginError: error, hasClientId: hasClientId() })
     })
     return () => {
       cancelled = true
@@ -28,6 +30,7 @@ export default function App() {
 
   useEffect(() => {
     const onLost = () => {
+      logWarn('app', 'session lost; back to login')
       playerController.disconnect()
       setLoginError('Your Spotify session expired. Please log in again.')
       setLoggedIn(false)
@@ -73,7 +76,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     void playerController.connect()
     getProfile()
-      .then((p) => setNotPremium(p.product !== undefined && p.product !== 'premium'))
+      .then((p) => {
+        log('app', 'spotify profile', { product: p.product ?? 'unknown' })
+        setNotPremium(p.product !== undefined && p.product !== 'premium')
+      })
       .catch(() => {})
   }, [])
 
@@ -84,6 +90,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     setSeenTrackId(trackId)
     if (trackId) setView('song')
   }
+
+  useEffect(() => log('app', 'view', { view, trackId: player.track?.id ?? null }), [view, player.track?.id])
 
   return (
     <div className="app">

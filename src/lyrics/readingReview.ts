@@ -1,5 +1,6 @@
 // Asks the dev server's /api/review-readings endpoint (server/readingReview.ts) to have Claude
 // check how the words of a Japanese song are sung.
+import { log, logError } from '../log'
 
 export interface ReviewSuggestion {
   source: string
@@ -33,6 +34,8 @@ export class ReviewError extends Error {
 
 export async function requestReadingReview(body: ReviewRequestBody, signal?: AbortSignal): Promise<ReviewResult> {
   let res: Response
+  const started = performance.now()
+  log('review', 'asking Claude to check readings', { title: body.title, artist: body.artist, lines: body.lines.length, words: body.words.length })
   try {
     res = await fetch('/api/review-readings', {
       method: 'POST',
@@ -45,7 +48,16 @@ export async function requestReadingReview(body: ReviewRequestBody, signal?: Abo
     throw new ReviewError('network', 'Could not reach the dev server to run the check.')
   }
   const data = (await res.json().catch(() => ({}))) as Partial<ReviewResult> & { error?: string; message?: string }
-  if (!res.ok) throw new ReviewError(data.error ?? 'failed', data.message ?? `Check failed (${res.status})`)
+  if (!res.ok) {
+    logError('review', 'failed', { status: res.status, error: data.error, message: data.message, ms: performance.now() - started })
+    throw new ReviewError(data.error ?? 'failed', data.message ?? `Check failed (${res.status})`)
+  }
+  log('review', 'done', {
+    ms: performance.now() - started,
+    model: data.model,
+    suggestions: (data.suggestions ?? []).map((s) => ({ source: s.source, reading: s.reading, confidence: s.confidence })),
+    notes: data.notes,
+  })
   return { suggestions: data.suggestions ?? [], notes: data.notes ?? '', model: data.model ?? '' }
 }
 

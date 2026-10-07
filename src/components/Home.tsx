@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlayer } from '../hooks'
 import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
+import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
 import { loadLibrary, masterySummary, removeFromLibrary, type LibraryEntry } from '../practice/storage'
 
@@ -11,6 +12,7 @@ export function Home({ onOpenSong }: { onOpenSong: () => void }) {
   const ready = player.status === 'ready' && player.deviceId
 
   const open = async (entry: LibraryEntry) => {
+    log('home', 'open song', { trackId: entry.id, name: entry.name, deviceReady: Boolean(player.deviceId) })
     if (!player.deviceId) return
     playerController.activate()
     if (player.track?.id === entry.id) {
@@ -21,11 +23,13 @@ export function Home({ onOpenSong }: { onOpenSong: () => void }) {
       await playTrack(player.deviceId, entry.uri)
       onOpenSong()
     } catch (e) {
+      logError('home', 'could not start song', { trackId: entry.id, error: e })
       setMessage(e instanceof Error ? e.message : String(e))
     }
   }
 
   const bringHere = async () => {
+    log('home', 'use what is playing on Spotify')
     if (!player.deviceId) return
     playerController.activate()
     try {

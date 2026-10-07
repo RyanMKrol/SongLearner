@@ -47,12 +47,30 @@ describe('TestTracker', () => {
     expect(events.filter((e) => e.type === 'passed').map((e) => e.section)).toEqual([0])
   })
 
+  it('reports why an attempt was cancelled', () => {
+    const tracker = new TestTracker(spans)
+    play(tracker, 9000, 12000)
+    expect(tracker.tick(12000, false, 3100)).toEqual([{ type: 'cancelled', section: 0, reason: 'paused' }])
+    play(tracker, 9500, 11000, 4000)
+    expect(tracker.tick(16000, true, 5600)).toEqual([{ type: 'cancelled', section: 0, reason: 'seeked' }])
+  })
+
   it('peeking cancels the attempt', () => {
     const tracker = new TestTracker(spans)
     play(tracker, 9000, 12000)
-    tracker.interrupt()
+    expect(tracker.interrupt()).toEqual([{ type: 'cancelled', section: 0, reason: 'peeked' }])
     const events = play(tracker, 12050, 20500, 3050)
     expect(events.some((e) => e.type === 'passed' && e.section === 0)).toBe(false)
+  })
+
+  it('nothing starts while the words are being peeked at', () => {
+    const tracker = new TestTracker(spans)
+    play(tracker, 9000, 11000)
+    expect(tracker.tick(11050, true, 2050, true)).toEqual([{ type: 'cancelled', section: 0, reason: 'peeked' }])
+    // Still peeking as section 1 begins: it must not start.
+    for (let pos = 11100, now = 2100; pos <= 21000; pos += 50, now += 50) {
+      expect(tracker.tick(pos, true, now, pos < 20200).filter((e) => e.type === 'started')).toEqual([])
+    }
   })
 
   it('resuming after a pause outside any section is not treated as a jump', () => {

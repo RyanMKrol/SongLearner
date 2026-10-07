@@ -23,7 +23,7 @@ export function Transport({ durationMs, practiceRange }: Props) {
   const pct = (ms: number) => `${(Math.min(Math.max(ms / Math.max(durationMs, 1), 0), 1) * 100).toFixed(2)}%`
 
   const commit = () => {
-    if (dragging !== null) void playerController.seek(dragging)
+    if (dragging !== null) void playerController.seek(dragging, 'scrub bar')
     setDragging(null)
   }
 
@@ -32,15 +32,15 @@ export function Transport({ durationMs, practiceRange }: Props) {
       <div className="transport-row">
         <button
           className="btn btn-primary play-btn"
-          onClick={() => void playerController.togglePlay()}
+          onClick={() => void playerController.togglePlay('play button')}
           aria-label={player.paused ? 'Play' : 'Pause'}
         >
           {player.paused ? '▶' : '❚❚'}
         </button>
-        <button className="btn btn-small" onClick={() => void playerController.seek(position - 5000)} title="Back 5s (←)">
+        <button className="btn btn-small" onClick={() => void playerController.seek(position - 5000, 'button: back 5s')} title="Back 5s (←)">
           −5s
         </button>
-        <button className="btn btn-small" onClick={() => void playerController.seek(position + 5000)} title="Forward 5s (→)">
+        <button className="btn btn-small" onClick={() => void playerController.seek(position + 5000, 'button: forward 5s')} title="Forward 5s (→)">
           +5s
         </button>
         <span className="time">

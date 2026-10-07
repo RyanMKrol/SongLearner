@@ -1,5 +1,6 @@
 // Spotify login using the Authorization Code flow with PKCE.
 // Everything runs in the browser, so no client secret is involved.
+import { log, logError, logWarn } from '../log'
 
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined
 const AUTH_URL = 'https://accounts.spotify.com/authorize'
@@ -80,6 +81,7 @@ export async function login(): Promise<void> {
   const state = randomString(16)
   localStorage.setItem(VERIFIER_KEY, verifier)
   localStorage.setItem(STATE_KEY, state)
+  log('auth', 'redirecting to Spotify login', { redirectUri: redirectUri(), scopes: SCOPES })
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -94,6 +96,7 @@ export async function login(): Promise<void> {
 }
 
 export function logout(): void {
+  log('auth', 'logged out')
   localStorage.removeItem(TOKEN_KEY)
 }
 
@@ -128,7 +131,10 @@ async function exchangeCallbackCode(): Promise<string | null> {
   window.history.replaceState(null, '', '/')
 
   const error = params.get('error')
-  if (error) return `Spotify login was cancelled or failed: ${error}`
+  if (error) {
+    logWarn('auth', 'login cancelled or failed', { error })
+    return `Spotify login was cancelled or failed: ${error}`
+  }
 
   const code = params.get('code')
   const verifier = localStorage.getItem(VERIFIER_KEY)
@@ -147,9 +153,11 @@ async function exchangeCallbackCode(): Promise<string | null> {
       client_id: CLIENT_ID ?? '',
       code_verifier: verifier,
     })
-    saveToken(res)
+    const token = saveToken(res)
+    log('auth', 'logged in', { expiresAt: new Date(token.expiresAt).toISOString(), gotRefreshToken: Boolean(res.refresh_token) })
     return null
   } catch (e) {
+    logError('auth', 'code exchange failed', { error: e })
     return e instanceof Error ? e.message : String(e)
   }
 }
@@ -158,12 +166,17 @@ let refreshing: Promise<StoredToken> | null = null
 
 async function refresh(token: StoredToken): Promise<StoredToken> {
   // Several callers may notice an expired token at once; only refresh once.
+  if (!refreshing) log('auth', 'refreshing access token', { expiredAt: new Date(token.expiresAt).toISOString() })
   refreshing ??= requestToken({
     grant_type: 'refresh_token',
     refresh_token: token.refreshToken,
     client_id: CLIENT_ID ?? '',
   })
-    .then((res) => saveToken(res, token.refreshToken))
+    .then((res) => {
+      const saved = saveToken(res, token.refreshToken)
+      log('auth', 'token refreshed', { expiresAt: new Date(saved.expiresAt).toISOString(), newRefreshToken: Boolean(res.refresh_token) })
+      return saved
+    })
     .finally(() => {
       refreshing = null
     })
@@ -183,6 +196,7 @@ export async function getAccessToken(forceRefresh = false): Promise<string> {
   try {
     return (await refresh(token)).accessToken
   } catch (e) {
+    logError('auth', 'refresh failed; session lost', { error: e })
     logout()
     window.dispatchEvent(new Event(AUTH_LOST_EVENT))
     throw new AuthError(e instanceof Error ? e.message : String(e))

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlayer } from '../hooks'
 import { playTrack, searchTracks, type SpotifyTrack } from '../spotify/api'
+import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
 
 interface Props {
@@ -40,6 +41,7 @@ function SearchBox({ onPicked }: { onPicked: () => void }) {
       searchTracks(q)
         .then((tracks) => {
           if (cancelled) return
+          log('search', 'results', { query: q, results: tracks.length })
           setResults(tracks)
           setHighlight(0)
           setError(null)
@@ -63,6 +65,7 @@ function SearchBox({ onPicked }: { onPicked: () => void }) {
   const visible = query.trim() ? results : []
 
   const pick = async (track: SpotifyTrack) => {
+    log('search', 'picked', { trackId: track.id, name: track.name, artists: track.artists.map((a) => a.name), deviceReady: Boolean(player.deviceId) })
     setOpen(false)
     setQuery('')
     if (!player.deviceId) {
@@ -74,6 +77,7 @@ function SearchBox({ onPicked }: { onPicked: () => void }) {
       await playTrack(player.deviceId, track.uri)
       onPicked()
     } catch (e) {
+      logError('search', 'could not start track', { trackId: track.id, error: e })
       setError(e instanceof Error ? e.message : String(e))
       setOpen(true)
     }

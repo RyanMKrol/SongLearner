@@ -58,6 +58,11 @@ describe('reading fixes', () => {
     ])
   })
 
+  it('offers yuube for 昨夜', () => {
+    const word = romajiLine('昨夜の夢を見た').words.find((w) => w.source === '昨夜')
+    expect(word).toMatchObject({ text: 'sakuya', alternatives: ['yuube'] })
+  })
+
   it('suggests common lyric readings', () => {
     const word = romajiLine('瞬間を待つ').words.find((w) => w.source === '瞬間')
     expect(word).toMatchObject({ text: 'shunkan', alternatives: ['toki'], fixed: false })

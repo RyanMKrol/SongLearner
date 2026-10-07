@@ -30,7 +30,7 @@ export function TapSync({
   const start = () => {
     setTaps([])
     setStarted(true)
-    void playerController.seek(0).then(() => playerController.resume())
+    void playerController.seek(0, 'tap sync: start').then(() => playerController.resume('tap sync: start'))
   }
 
   const tap = useCallback(() => {
@@ -47,7 +47,7 @@ export function TapSync({
       if (prev.length === 0) return prev
       const next = prev.slice(0, -1)
       // Jump back to just before the previous line so you can hear the run-up again.
-      void playerController.seek(Math.max(0, (next.at(-1) ?? 0) - 1500))
+      void playerController.seek(Math.max(0, (next.at(-1) ?? 0) - 1500), 'tap sync: undo')
       return next
     })
   }, [])

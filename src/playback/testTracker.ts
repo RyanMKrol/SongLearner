@@ -7,7 +7,10 @@ export interface TestSpan {
   endMs: number
 }
 
-export type TestEvent = { type: 'passed'; section: number } | { type: 'started'; section: number }
+export type TestEvent =
+  | { type: 'passed'; section: number }
+  | { type: 'started'; section: number }
+  | { type: 'cancelled'; section: number; reason: 'paused' | 'seeked' | 'peeked' | 'left section' | 'sections changed' }
 
 /** A section only counts if you were there from (nearly) its first line. */
 const START_WINDOW_MS = 1500
@@ -21,6 +24,8 @@ export class TestTracker {
   private attempt: number | null = null
   private lastPosition: number | null = null
   private lastAt = 0
+  /** Furthest position heard while peeking; sections starting at or before it can't count. */
+  private peekedAt = Number.NEGATIVE_INFINITY
 
   constructor(spans: TestSpan[]) {
     this.spans = spans
@@ -31,37 +36,51 @@ export class TestTracker {
     return this.attempt
   }
 
-  setSpans(spans: TestSpan[]): void {
+  setSpans(spans: TestSpan[]): TestEvent[] {
     this.spans = spans
-    this.attempt = null
+    return this.cancel('sections changed')
   }
 
   /** Peeking at the words, or anything else that means the attempt doesn't count. */
-  interrupt(): void {
-    this.attempt = null
+  interrupt(): TestEvent[] {
+    return this.cancel('peeked')
   }
 
-  tick(positionMs: number, playing: boolean, now: number): TestEvent[] {
+  private cancel(reason: Extract<TestEvent, { type: 'cancelled' }>['reason']): TestEvent[] {
+    if (this.attempt === null) return []
+    const section = this.attempt
+    this.attempt = null
+    return [{ type: 'cancelled', section, reason }]
+  }
+
+  /** `peeking` is true while the words are being shown; nothing counts until it ends. */
+  tick(positionMs: number, playing: boolean, now: number, peeking = false): TestEvent[] {
     const events: TestEvent[] = []
     const last = this.lastPosition
     const expected = last === null ? positionMs : last + (now - this.lastAt)
     this.lastPosition = positionMs
     this.lastAt = now
 
+    if (peeking) {
+      this.peekedAt = Math.max(this.peekedAt, positionMs)
+      return this.cancel('peeked')
+    }
+
     if (!playing) {
       // Pausing mid-section means you stopped to think: that attempt is over.
-      this.attempt = null
-      // Keep the position so resuming doesn't look like a jump.
-      return events
+      // (The position is kept, so resuming doesn't look like a jump.)
+      return this.cancel('paused')
     }
     if (last !== null && Math.abs(positionMs - expected) > JUMP_TOLERANCE_MS) {
-      this.attempt = null
+      events.push(...this.cancel('seeked'))
+      // Jumping somewhere (e.g. back to retry a section) clears the peek.
+      this.peekedAt = Number.NEGATIVE_INFINITY
     }
 
     if (this.attempt !== null) {
       const span = this.spans[this.attempt]
       if (!span || positionMs < span.startMs - JUMP_TOLERANCE_MS) {
-        this.attempt = null
+        events.push(...this.cancel('left section'))
       } else if (positionMs >= span.endMs - END_SLACK_MS) {
         events.push({ type: 'passed', section: this.attempt })
         this.attempt = null
@@ -70,7 +89,11 @@ export class TestTracker {
 
     if (this.attempt === null) {
       const index = this.spans.findIndex(
-        (s) => positionMs >= s.startMs && positionMs < s.startMs + START_WINDOW_MS && positionMs < s.endMs - END_SLACK_MS,
+        (s) =>
+          s.startMs > this.peekedAt &&
+          positionMs >= s.startMs &&
+          positionMs < s.startMs + START_WINDOW_MS &&
+          positionMs < s.endMs - END_SLACK_MS,
       )
       if (index >= 0) {
         this.attempt = index
