@@ -122,12 +122,14 @@ export function useKaraokeSet() {
     return () => window.clearInterval(id)
   }, [currentId, advance])
 
-  const start = useCallback((order: KaraokeOrder) => {
+  /** Starts a set and returns the first song's id (or null if there's nothing learned yet). */
+  const start = useCallback((order: KaraokeOrder): string | null => {
     const queue = ordered(loadLearnedSongs(), order)
-    if (queue.length === 0) return
+    if (queue.length === 0) return null
     playerController.activate()
     log('karaoke', 'set started', { order, songs: queue.map((s) => s.id) })
     setState({ queue, index: 0, passed: {}, results: [], finished: false })
+    return queue[0].id
   }, [])
 
   const onPass = useCallback((startLine: number) => {

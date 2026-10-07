@@ -5,7 +5,7 @@ import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
 import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
 
-export function Home({ onOpenSong, onKaraoke }: { onOpenSong: () => void; onKaraoke: () => void }) {
+export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) => void; onKaraoke: () => void }) {
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
@@ -18,12 +18,12 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: () => void; onKara
     if (!player.deviceId) return
     playerController.activate()
     if (player.track?.id === entry.id) {
-      onOpenSong()
+      onOpenSong(entry.id)
       return
     }
     try {
       await playTrack(player.deviceId, entry.uri)
-      onOpenSong()
+      onOpenSong(entry.id)
     } catch (e) {
       logError('home', 'could not start song', { trackId: entry.id, error: e })
       setMessage(e instanceof Error ? e.message : String(e))
@@ -41,11 +41,11 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: () => void; onKara
         return
       }
       if (state.device.id === player.deviceId) {
-        onOpenSong()
+        onOpenSong(state.item.id)
         return
       }
       await transferPlayback(player.deviceId, true)
-      onOpenSong()
+      onOpenSong(state.item.id)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e))
     }
@@ -68,7 +68,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: () => void; onKara
             </button>
           )}
           {player.track && (
-            <button className="btn" onClick={onOpenSong}>
+            <button className="btn" onClick={() => player.track && onOpenSong(player.track.id)}>
               Back to {player.track.name}
             </button>
           )}

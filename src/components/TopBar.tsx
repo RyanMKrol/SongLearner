@@ -9,7 +9,7 @@ interface Props {
   onHome: () => void
   onKaraoke: () => void
   onLogout: () => void
-  onPicked: () => void
+  onPicked: (trackId: string) => void
 }
 
 export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
@@ -43,7 +43,7 @@ function SaveStatus() {
   return <span className={`save-status save-${status}`}>{text}</span>
 }
 
-function SearchBox({ onPicked }: { onPicked: () => void }) {
+function SearchBox({ onPicked }: { onPicked: (trackId: string) => void }) {
   const player = usePlayer()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SpotifyTrack[]>([])
@@ -94,7 +94,7 @@ function SearchBox({ onPicked }: { onPicked: () => void }) {
     playerController.activate()
     try {
       await playTrack(player.deviceId, track.uri)
-      onPicked()
+      onPicked(track.id)
     } catch (e) {
       logError('search', 'could not start track', { trackId: track.id, error: e })
       setError(e instanceof Error ? e.message : String(e))

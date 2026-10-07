@@ -11,7 +11,7 @@ export function KaraokePage({
   onDone,
 }: {
   set: KaraokeSet
-  onOpenSong: () => void
+  onOpenSong: (trackId: string) => void
   onDone: () => void
 }) {
   const player = usePlayer()
@@ -95,8 +95,8 @@ export function KaraokePage({
               className="btn btn-primary"
               disabled={!ready}
               onClick={() => {
-                set.start(order)
-                onOpenSong()
+                const first = set.start(order)
+                if (first) onOpenSong(first)
               }}
             >
               Start the set ({songs.length} {songs.length === 1 ? 'song' : 'songs'})

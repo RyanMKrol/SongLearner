@@ -19,6 +19,7 @@ import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { log, logDebug } from '../log'
+import { rememberPosition } from '../playback/positions'
 import { playerController, type PlayerTrack } from '../spotify/player'
 import { EndOfLyrics } from './EndOfLyrics'
 import { LyricsPane } from './LyricsPane'
@@ -635,6 +636,14 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   useEffect(() => {
     if (justPassed !== null) log('song-view', 'section learned', { section: justPassed })
   }, [justPassed])
+
+  // Remember where you are, so going back to this song later resumes here.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (playerController.getSnapshot().track?.id === track.id) rememberPosition(track.id, playerController.clock.position())
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [track.id])
 
   // Every 5 seconds, a snapshot of where things stand, so the logs read as a timeline.
   const heartbeatRef = useRef<() => Record<string, unknown>>(() => ({}))

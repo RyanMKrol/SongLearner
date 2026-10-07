@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
 import { KaraokePage } from './components/Karaoke'
 import { useKaraokeSet } from './karaoke'
@@ -6,9 +6,12 @@ import { Landing } from './components/Landing'
 import { SongView } from './components/SongView'
 import { TopBar } from './components/TopBar'
 import { usePlayer } from './hooks'
-import { getProfile } from './spotify/api'
+import { lastPosition } from './playback/positions'
+import { loadLibrary } from './practice/storage'
+import { navigate, routePath, songRoute, useRoute } from './router'
+import { getProfile, playTrack } from './spotify/api'
 import { AUTH_LOST_EVENT, handleCallback, hasClientId, isLoggedIn, logout } from './spotify/auth'
-import { log, logWarn } from './log'
+import { log, logError, logWarn } from './log'
 import { playerController } from './spotify/player'
 
 export default function App() {
@@ -72,7 +75,7 @@ export default function App() {
 
 function Workspace({ onLogout }: { onLogout: () => void }) {
   const player = usePlayer()
-  const [view, setView] = useState<'home' | 'song' | 'karaoke'>('home')
+  const route = useRoute()
   const karaoke = useKaraokeSet()
   const [notPremium, setNotPremium] = useState(false)
 
@@ -86,23 +89,63 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       .catch(() => {})
   }, [])
 
-  // Follow the player: when a new track starts playing here, show it.
-  const trackId = player.track?.id
-  const [seenTrackId, setSeenTrackId] = useState(trackId)
-  if (trackId !== seenTrackId) {
-    setSeenTrackId(trackId)
-    if (trackId) setView('song')
-  }
+  // Keep the address and the player in step:
+  // - when a different song starts playing (a karaoke set moving on, or a song started from your
+  //   phone), show it;
+  // - when the address changes to a song that isn't playing (back/forward, a refresh), play it from
+  //   where you left off.
+  const trackId = player.track?.id ?? null
+  const deviceId = player.deviceId
+  const routeKey = routePath(route)
+  const previous = useRef({ trackId, routeKey })
+  const requested = useRef<string | null>(null)
+  useEffect(() => {
+    const trackChanged = trackId !== previous.current.trackId
+    previous.current = { trackId, routeKey }
+    if (trackId && trackId === requested.current) requested.current = null
 
-  useEffect(() => log('app', 'view', { view, trackId: player.track?.id ?? null }), [view, player.track?.id])
+    if (trackChanged && trackId && (route.name === 'home' || route.name === 'song')) {
+      const showing = route.name === 'song' ? route.trackId : null
+      // Still switching to the song the address asked for; this is the old song's last report.
+      const waiting = showing !== null && showing === requested.current
+      if (showing !== trackId && !waiting) {
+        navigate(songRoute(trackId), { replace: route.name === 'song' })
+        return
+      }
+    }
+
+    if (route.name === 'song' && deviceId && trackId !== route.trackId && requested.current !== route.trackId) {
+      const target = route.trackId
+      requested.current = target
+      const uri = loadLibrary().find((e) => e.id === target)?.uri ?? `spotify:track:${target}`
+      const position = lastPosition(target)
+      log('nav', 'playing the song the address asked for', { trackId: target, position })
+      playTrack(deviceId, uri, position).catch((e: unknown) => {
+        logError('nav', 'could not play the song for this address', { trackId: target, error: e })
+        if (requested.current === target) requested.current = null
+      })
+    }
+  }, [trackId, routeKey, deviceId, route])
+
+  useEffect(() => {
+    log('app', 'route', { route: routeKey, trackId })
+    const name = route.name === 'song' ? (player.track?.id === route.trackId ? player.track.name : null) : null
+    document.title = route.name === 'karaoke' ? 'Karaoke set · SongLearner' : name ? `${name} · SongLearner` : 'SongLearner'
+    // Only the route and the shown song's name matter for the title.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey, player.track?.name])
+
+  const openSong = (id: string) => navigate(songRoute(id))
+  const songTrack = route.name === 'song' && player.track?.id === route.trackId ? player.track : null
+  const songEntry = route.name === 'song' ? loadLibrary().find((e) => e.id === route.trackId) : undefined
 
   return (
     <div className="app">
       <TopBar
-        onHome={() => setView('home')}
-        onKaraoke={() => setView('karaoke')}
+        onHome={() => navigate({ name: 'home' })}
+        onKaraoke={() => navigate({ name: 'karaoke' })}
         onLogout={onLogout}
-        onPicked={() => setView('song')}
+        onPicked={openSong}
       />
       {notPremium && (
         <div className="banner banner-error">
@@ -111,34 +154,44 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       )}
       {player.status === 'error' && <div className="banner banner-error">{player.error}</div>}
       {player.status !== 'error' && player.error && <div className="banner">{player.error}</div>}
-      {view === 'karaoke' || karaoke.finished ? (
+      {route.name === 'karaoke' || karaoke.finished ? (
         <KaraokePage
           set={karaoke}
-          onOpenSong={() => setView('song')}
+          onOpenSong={openSong}
           onDone={() => {
             karaoke.close()
-            setView('karaoke')
+            navigate({ name: 'karaoke' })
           }}
         />
-      ) : view === 'song' && player.track ? (
-        <SongView
-          key={player.track.id}
-          track={player.track}
-          karaoke={
-            karaoke.active && karaoke.current?.id === player.track.id
-              ? {
-                  number: karaoke.number,
-                  total: karaoke.total,
-                  nextName: karaoke.nextName,
-                  onPass: karaoke.onPass,
-                  onNext: karaoke.next,
-                  onEnd: karaoke.end,
-                }
-              : null
-          }
-        />
+      ) : route.name === 'song' ? (
+        songTrack ? (
+          <SongView
+            key={songTrack.id}
+            track={songTrack}
+            karaoke={
+              karaoke.active && karaoke.current?.id === songTrack.id
+                ? {
+                    number: karaoke.number,
+                    total: karaoke.total,
+                    nextName: karaoke.nextName,
+                    onPass: karaoke.onPass,
+                    onNext: karaoke.next,
+                    onEnd: karaoke.end,
+                  }
+                : null
+            }
+          />
+        ) : (
+          <main className="home">
+            <p className="muted">
+              {player.status === 'ready'
+                ? `Loading ${songEntry?.name ?? 'the song'}…`
+                : 'Connecting to Spotify…'}
+            </p>
+          </main>
+        )
       ) : (
-        <Home onOpenSong={() => setView('song')} onKaraoke={() => setView('karaoke')} />
+        <Home onOpenSong={openSong} onKaraoke={() => navigate({ name: 'karaoke' })} />
       )}
     </div>
   )
