@@ -31,6 +31,14 @@ describe('romanizeTokens', () => {
     expect(romaji('君のことが好きだった')).toBe('kimi no koto ga suki datta')
   })
 
+  it('reads counted words as whole words', () => {
+    expect(romaji('二人で歩こう')).toBe('futari de arukou')
+    expect(romaji('一人きりの夜')).toBe('hitori kiri no yoru')
+    expect(romaji('三日後に何度も会った')).toBe('mikkago ni nando mo atta')
+    expect(romaji('二十歳の春')).toBe('hatachi no haru')
+    expect(romaji('貴女に会いたい')).toBe('anata ni aitai')
+  })
+
   it('leaves English alone and handles full-width spaces and brackets', () => {
     expect(romaji('Hello 世界、ラブソング')).toBe('Hello sekai, rabusongu')
     expect(romaji('明日また会おうね　「さよなら」')).toBe('ashita mata aou ne sayonara')

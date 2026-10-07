@@ -50,10 +50,68 @@ function particleRomaji(token: IpadicFeatures): string | null {
   return null
 }
 
+/**
+ * Readings the dictionary gets wrong for songs. Mostly counted words: kuromoji splits a number
+ * from its counter (二 + 人) and reads each half on its own, giving "ninin" instead of "futari".
+ */
+const SPECIAL_READINGS: Record<string, string> = {
+  一人: 'ヒトリ',
+  二人: 'フタリ',
+  二日: 'フツカ',
+  三日: 'ミッカ',
+  四日: 'ヨッカ',
+  五日: 'イツカ',
+  六日: 'ムイカ',
+  七日: 'ナノカ',
+  八日: 'ヨウカ',
+  九日: 'ココノカ',
+  十日: 'トオカ',
+  二十日: 'ハツカ',
+  二十歳: 'ハタチ',
+  一回: 'イッカイ',
+  六回: 'ロッカイ',
+  十回: 'ジュッカイ',
+  一杯: 'イッパイ',
+  一本: 'イッポン',
+  三本: 'サンボン',
+  一歩: 'イッポ',
+  一分: 'イップン',
+  三分: 'サンプン',
+  十分: 'ジュップン',
+  一秒: 'イチビョウ',
+  一個: 'イッコ',
+  // Songs read 貴女 as "anata"; the dictionary has the formal "kijo".
+  貴女: 'アナタ',
+}
+
+/** Joins a number with the digits and counter after it (二 + 人, 二 + 十 + 日) into one token. */
+function mergeCounters(tokens: IpadicFeatures[]): IpadicFeatures[] {
+  const out: IpadicFeatures[] = []
+  for (const token of tokens) {
+    const prev = out.at(-1)
+    const isCounter = token.pos === '名詞' && token.pos_detail_1 === '接尾' && token.pos_detail_2 === '助数詞'
+    const isNumber = token.pos === '名詞' && token.pos_detail_1 === '数'
+    if (prev && (isCounter || isNumber) && prev.pos === '名詞' && prev.pos_detail_1 === '数') {
+      const surface = prev.surface_form + token.surface_form
+      out[out.length - 1] = {
+        ...token,
+        surface_form: surface,
+        pos_detail_1: '数',
+        reading: SPECIAL_READINGS[surface] ?? `${readingOf(prev)}${readingOf(token)}`,
+      }
+    } else {
+      out.push(token)
+    }
+  }
+  return out
+}
+
 const DROPPED = /[「」『』【】〈〉《》]/g
 const OPENING = new Set(['(', '['])
 
 function readingOf(token: IpadicFeatures): string {
+  const special = SPECIAL_READINGS[token.surface_form]
+  if (special) return special
   const reading = token.reading
   return reading && reading !== '*' ? reading : token.surface_form
 }
@@ -61,7 +119,7 @@ function readingOf(token: IpadicFeatures): string {
 /** Romaji for one tokenised line. Exported for tests; the app uses `romanizeLines`. */
 export function romanizeTokens(tokens: IpadicFeatures[]): string {
   const pieces: Piece[] = []
-  for (const token of tokens) {
+  for (const token of mergeCounters(tokens)) {
     const surface = token.surface_form.replace(DROPPED, '')
     if (!surface) continue
     const last = pieces.at(-1)
