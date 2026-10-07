@@ -129,21 +129,26 @@ export function lineIndexAt(lines: LyricLine[], timeMs: number): number {
 }
 
 /**
- * Copies lines `fromLine`..`toLine` to the end of the lyrics, with the first copy at `atMs` and the
- * same spacing as the original. For songs whose lyric file stops before the singing does, which
- * usually means an outro that repeats an earlier part. Returns the new LRC, or null if the lyrics
- * aren't timed or `atMs` isn't after the last line.
+ * Adds lines to the end of the lyrics, one per tap: the first tap adds line `fromLine`, the next
+ * the line after it, and so on through `toLine`, then back to `fromLine`. For songs whose lyric
+ * file stops before the singing does, typically an outro that repeats an earlier part with its
+ * own timing. Returns the new LRC, or null if the lyrics aren't timed or a tap isn't after the
+ * line before it.
  */
-export function appendRepeat(lines: LyricLine[], fromLine: number, toLine: number, atMs: number): string | null {
+export function appendTapped(lines: LyricLine[], fromLine: number, toLine: number, tapsMs: number[]): string | null {
   if (lines.some((l) => l.timeMs === null)) return null
   const timed = lines as (LyricLine & { timeMs: number })[]
-  const last = timed.at(-1)?.timeMs ?? 0
-  const base = timed[fromLine]?.timeMs
-  if (base === undefined || atMs <= last) return null
-  const copies = timed.slice(fromLine, toLine + 1).map((line, i) => ({
-    timeMs: Math.round(atMs + (line.timeMs - base)),
-    text: line.text,
-    stanzaBreakBefore: i === 0,
-  }))
-  return toLrc([...timed, ...copies])
+  const sequence = timed.slice(fromLine, toLine + 1).filter((l) => /[\p{L}\p{N}]/u.test(l.text))
+  if (sequence.length === 0) return null
+  let previous = timed.at(-1)?.timeMs ?? 0
+  const added = []
+  for (let k = 0; k < tapsMs.length; k++) {
+    const t = Math.round(tapsMs[k])
+    if (t <= previous) return null
+    previous = t
+    const line = sequence[k % sequence.length]
+    // Each pass through the repeated part starts a new stanza, so it becomes its own section.
+    added.push({ timeMs: t, text: line.text, stanzaBreakBefore: k % sequence.length === 0 })
+  }
+  return toLrc([...timed, ...added])
 }

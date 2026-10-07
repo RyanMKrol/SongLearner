@@ -45,6 +45,8 @@ export interface SavedLyrics {
   /** Human-readable description of where the lyrics came from. */
   label: string
   lrclibId?: number
+  /** Lines from this index on were added by you at the end (see EndOfLyrics). */
+  addedFromLine?: number
 }
 
 export interface LibraryEntry {

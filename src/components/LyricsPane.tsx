@@ -35,6 +35,8 @@ interface Props {
   test: TestModeProps | null
   /** Shown after the last line (e.g. when the lyrics end before the song does). */
   endNotice?: ReactNode
+  /** When set, clicking lines picks a range (for adding an ending) instead of seeking. */
+  pickLines?: { from: number | null; to: number | null; onPick: (lineIndex: number, extend: boolean) => void } | null
 }
 
 export interface TestModeProps {
@@ -114,6 +116,10 @@ export function LyricsPane(props: Props) {
             synced && i < currentLine ? 'is-past' : '',
             synced && i === nextSung ? 'is-next' : '',
             outside ? 'is-outside' : '',
+            props.pickLines ? 'is-pickable' : '',
+            props.pickLines?.from != null && props.pickLines.to != null && i >= props.pickLines.from && i <= props.pickLines.to
+              ? 'is-picked'
+              : '',
             sung ? '' : 'is-gap',
           ]
             .filter(Boolean)
@@ -145,8 +151,10 @@ export function LyricsPane(props: Props) {
                   lineRefs.current[i] = el
                 }}
                 className={classes}
-                onClick={() => {
-                  if (editSplits) {
+                onClick={(e) => {
+                  if (props.pickLines) {
+                    props.pickLines.onPick(i, e.shiftKey)
+                  } else if (editSplits) {
                     if (sung) props.onToggleSplit(i)
                   } else if (synced && line.timeMs !== null) {
                     userScrolledAt.current = 0

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendRepeat, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
+import { appendTapped, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
 import { cleanTrackName, pickBest, type LrclibRecord } from '../lyrics/lrclib'
 import { autoSectionStarts, buildSections, sectionTimings } from '../lyrics/sections'
 
@@ -161,23 +161,32 @@ describe('lrclib helpers', () => {
   })
 })
 
-describe('appendRepeat', () => {
+describe('appendTapped', () => {
   const { lines } = parseLrc(SONG)
 
-  it('copies a section to the end with the same spacing', () => {
-    // The chorus is lines 4-7 (22s, 25s, 28s, 31s); repeat it from 95s.
-    const text = appendRepeat(lines, 4, 7, 95000)
+  it('adds the chosen lines in order at each tap, looping back to the first', () => {
+    // Repeat lines 5-6 (the middle of the chorus) three times with free timing.
+    const text = appendTapped(lines, 5, 6, [95000, 98500, 101000, 103000, 106200])
     const after = parseLrc(text ?? '').lines
-    expect(after.length).toBe(lines.length + 4)
     expect(after.slice(0, lines.length)).toEqual(lines)
-    expect(after.slice(-4).map((l) => [l.timeMs, l.text])).toEqual(
-      lines.slice(4, 8).map((l, i) => [95000 + i * 3000, l.text]),
-    )
-    expect(after.at(-4)?.stanzaBreakBefore).toBe(true)
+    expect(after.slice(lines.length).map((l) => [l.timeMs, l.text, l.stanzaBreakBefore])).toEqual([
+      [95000, lines[5].text, true],
+      [98500, lines[6].text, false],
+      [101000, lines[5].text, true],
+      [103000, lines[6].text, false],
+      [106200, lines[5].text, true],
+    ])
   })
 
-  it('refuses positions before the last line, and untimed lyrics', () => {
-    expect(appendRepeat(lines, 4, 7, 60000)).toBeNull()
-    expect(appendRepeat(parsePlain('a\nb').lines, 0, 1, 99999)).toBeNull()
+  it('skips instrumental markers in the chosen range', () => {
+    const text = appendTapped(lines, 16, 18, [95000, 97000, 99000])
+    const added = parseLrc(text ?? '').lines.slice(lines.length)
+    expect(added.map((l) => l.text)).toEqual([lines[16].text, lines[17].text, lines[16].text])
+  })
+
+  it('refuses taps before the last line or out of order, and untimed lyrics', () => {
+    expect(appendTapped(lines, 4, 7, [60000])).toBeNull()
+    expect(appendTapped(lines, 4, 7, [95000, 94000])).toBeNull()
+    expect(appendTapped(parsePlain('a\nb').lines, 0, 1, [99999])).toBeNull()
   })
 })

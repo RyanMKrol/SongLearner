@@ -10,8 +10,8 @@ import {
   useRomaji,
   type RomajiMode,
 } from '../hooks'
-import { appendRepeat, lineIndexAt, parseLyrics } from '../lyrics/lrc'
-import type { LrclibRecord } from '../lyrics/lrclib'
+import { appendTapped, lineIndexAt, parseLyrics, toLrc } from '../lyrics/lrc'
+import { getLrclibRecord, type LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
 import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
 import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, type Section } from '../lyrics/sections'
@@ -142,53 +142,123 @@ export function SongView({ track }: { track: PlayerTrack }) {
     },
     [track.name, track.artists, track.album, lines, updatePrefs],
   )
-  /** Sets how a word is sung in this song, or null to go back to the dictionary reading. */
-  // Lyric files often stop before the song does (an outro that repeats an earlier part).
+  // Lyric files often stop before the song does (an outro that repeats an earlier part). You can
+  // add the ending by tapping: pick the repeated lines, then tap as each one is sung.
   const lastLyricMs = synced ? (lines.at(-1)?.timeMs ?? 0) : 0
   const lyricsEndSongMs = lastLyricMs - offset
-  const [undoAddition, setUndoAddition] = useState<SavedLyrics | null>(null)
+  const [outro, setOutro] = useState<{
+    base: SavedLyrics
+    baseLines: typeof lines
+    from: number | null
+    to: number | null
+    taps: number[]
+  } | null>(null)
+  const hasAdditions = saved?.addedFromLine !== undefined || Boolean(saved?.label.endsWith(' + your additions'))
   const showEndNotice =
-    synced && sections.length > 0 && (track.durationMs - lyricsEndSongMs > 25000 || undoAddition !== null)
+    synced && sections.length > 0 && (track.durationMs - lyricsEndSongMs > 25000 || hasAdditions || outro !== null)
 
-  const addRepeat = (sectionIndex: number) => {
-    const section = sections[sectionIndex]
-    if (!section || !saved) return
-    const at = playerController.clock.position() + offset
-    const text = appendRepeat(lines, section.startLine, section.endLine, at)
-    if (!text) return
-    log('lyrics', 'added a repeat at the end', {
-      section: sectionIndex,
-      atMs: Math.round(at),
-      lines: section.endLine - section.startLine + 1,
-    })
-    const label = saved.label.endsWith(' + your additions') ? saved.label : `${saved.label} + your additions`
-    setUndoAddition(saved)
-    replace({ ...saved, text, label })
-    const firstNewLine = lines.length
+  /** Saves the base lyrics plus the tapped lines, keeping prefs and Claude's check in step. */
+  const saveOutro = (state: NonNullable<typeof outro>) => {
+    if (state.from === null) return true
+    const to = state.to ?? state.baseLines.length - 1
+    const base = state.base
+    const text = state.taps.length === 0 ? base.text : appendTapped(state.baseLines, state.from, to, state.taps)
+    if (text === null) return false
+    const baseLabel = base.label.replace(/ \+ your additions$/, '')
+    replace(
+      state.taps.length === 0
+        ? base
+        : { ...base, text, label: `${baseLabel} + your additions`, addedFromLine: base.addedFromLine ?? state.baseLines.length },
+    )
     const newKey = lyricsKey(text)
     updatePrefs((p) => ({
       ...p,
-      // Lines are only added at the end, so existing sections and ratings still line up.
-      sectionStarts: p.sectionStarts ? [...p.sectionStarts, firstNewLine] : undefined,
-      // The repeat adds no new words, so Claude's check still applies.
+      // The added lines repeat existing ones, so Claude's check still applies.
+      aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: newKey } : p.aiReview,
+    }))
+    return true
+  }
+
+  const startOutro = () => {
+    if (!saved) return
+    log('lyrics', 'adding an ending: started')
+    setOutro({ base: saved, baseLines: lines, from: null, to: null, taps: [] })
+  }
+
+  const pickOutroLine = (lineIndex: number, extend: boolean) => {
+    if (!outro || outro.taps.length > 0 || lineIndex >= outro.baseLines.length) return
+    if (!isSung(outro.baseLines[lineIndex])) return
+    const next =
+      extend && outro.from !== null && lineIndex >= outro.from
+        ? { ...outro, to: lineIndex }
+        : { ...outro, from: lineIndex, to: null }
+    log('lyrics', 'adding an ending: lines picked', { from: next.from, to: next.to })
+    setOutro(next)
+  }
+
+  const tapOutro = () => {
+    if (!outro || outro.from === null) return
+    // People tap a little after they hear a line start.
+    const at = playerController.clock.position() + offset - 120
+    const next = { ...outro, taps: [...outro.taps, at] }
+    if (!saveOutro(next)) {
+      logDebug('lyrics', 'adding an ending: tap ignored (before the previous line)', { atMs: Math.round(at) })
+      return
+    }
+    log('lyrics', 'adding an ending: tap', { atMs: Math.round(at), count: next.taps.length })
+    setOutro(next)
+  }
+
+  const undoOutroTap = () => {
+    if (!outro || outro.taps.length === 0) return
+    const next = { ...outro, taps: outro.taps.slice(0, -1) }
+    saveOutro(next)
+    log('lyrics', 'adding an ending: undo tap', { count: next.taps.length })
+    setOutro(next)
+  }
+
+  const finishOutro = (keep: boolean) => {
+    if (!outro) return
+    log('lyrics', keep ? 'adding an ending: done' : 'adding an ending: cancelled', { taps: outro.taps.length })
+    if (!keep) saveOutro({ ...outro, taps: [] })
+    setOutro(null)
+  }
+
+  // While tapping in an ending, Space taps, Backspace undoes and Escape finishes. The keyboard
+  // handler reads these through a ref so it always sees the latest taps.
+  const outroKeysRef = useRef({ active: false, tap: tapOutro, undo: undoOutroTap, finish: finishOutro })
+  useEffect(() => {
+    outroKeysRef.current = { active: outro?.from != null, tap: tapOutro, undo: undoOutroTap, finish: finishOutro }
+  })
+
+  /** Removes every line added at the end, going back to the lyrics as downloaded. */
+  const removeAdditions = async () => {
+    if (!saved) return
+    let keepLines = saved.addedFromLine
+    // Additions made before addedFromLine was recorded: count the lines of the LRCLIB original.
+    if (keepLines === undefined && saved.lrclibId !== undefined) {
+      const record = await getLrclibRecord(saved.lrclibId).catch(() => null)
+      const original = record?.syncedLyrics ? parseLyrics(record.syncedLyrics).lines : null
+      if (original && original.every((l, i) => lines[i]?.text === l.text && lines[i]?.timeMs === l.timeMs)) {
+        keepLines = original.length
+      }
+    }
+    if (keepLines === undefined || keepLines >= lines.length) {
+      log('lyrics', 'remove additions: nothing to remove', { keepLines, lines: lines.length })
+      return
+    }
+    const text = toLrc(lines.slice(0, keepLines).map((l) => ({ ...l, timeMs: l.timeMs ?? 0 })))
+    log('lyrics', 'removed added lines', { removed: lines.length - keepLines })
+    replace({ ...saved, text, label: saved.label.replace(/ \+ your additions$/, ''), addedFromLine: undefined })
+    const newKey = lyricsKey(text)
+    updatePrefs((p) => ({
+      ...p,
+      sectionStarts: p.sectionStarts?.filter((i) => i < (keepLines ?? 0)),
       aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: newKey } : p.aiReview,
     }))
   }
 
-  const undoAdd = () => {
-    if (!undoAddition) return
-    log('lyrics', 'undid the last addition')
-    const previousKey = lyricsKey(undoAddition.text)
-    const previousLines = parseLyrics(undoAddition.text).lines.length
-    replace(undoAddition)
-    setUndoAddition(null)
-    updatePrefs((p) => ({
-      ...p,
-      sectionStarts: p.sectionStarts?.filter((i) => i < previousLines),
-      aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: previousKey } : p.aiReview,
-    }))
-  }
-
+  /** Sets how a word is sung in this song, or null to go back to the dictionary reading. */
   const saveReading = useCallback(
     (word: RomajiWord, reading: string | null) => {
       updatePrefs((p) => {
@@ -407,6 +477,23 @@ export function SongView({ track }: { track: PlayerTrack }) {
       if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return
       const pos = playerController.clock.position()
       if (!e.repeat) logDebug('keys', 'pressed', { key: e.key, position: Math.round(pos) })
+      const outroKeys = outroKeysRef.current
+      if (outroKeys.active) {
+        if (e.key === ' ') {
+          e.preventDefault()
+          if (!e.repeat) outroKeys.tap()
+          return
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault()
+          outroKeys.undo()
+          return
+        }
+        if (e.key === 'Escape') {
+          outroKeys.finish(true)
+          return
+        }
+      }
       switch (e.key) {
         case ' ':
           e.preventDefault()
@@ -614,14 +701,34 @@ export function SongView({ track }: { track: PlayerTrack }) {
               fixReadings={fixReadings && romajiLines !== null}
               onWordClick={setFixingWord}
               onChooseReading={saveReading}
+              pickLines={
+                outro && outro.taps.length === 0
+                  ? {
+                      from: outro.from,
+                      to: outro.to ?? (outro.from !== null ? outro.baseLines.length - 1 : null),
+                      onPick: pickOutroLine,
+                    }
+                  : null
+              }
               endNotice={
                 showEndNotice && !testMode ? (
                   <EndOfLyrics
                     endsAtMs={lyricsEndSongMs}
                     durationMs={track.durationMs}
-                    sections={displaySections}
-                    onAdd={addRepeat}
-                    onUndo={undoAddition ? undoAdd : null}
+                    hasAdditions={hasAdditions}
+                    outro={
+                      outro && {
+                        from: outro.from,
+                        to: outro.to ?? (outro.from !== null ? outro.baseLines.length - 1 : null),
+                        taps: outro.taps.length,
+                        lines: outro.baseLines,
+                      }
+                    }
+                    onStart={startOutro}
+                    onTap={tapOutro}
+                    onUndoTap={undoOutroTap}
+                    onFinish={finishOutro}
+                    onRemoveAdditions={() => void removeAdditions()}
                   />
                 ) : null
               }

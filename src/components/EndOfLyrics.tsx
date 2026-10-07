@@ -1,61 +1,120 @@
-import { useState } from 'react'
 import { formatTime, usePosition } from '../hooks'
-import type { Section } from '../lyrics/sections'
+import type { LyricLine } from '../lyrics/lrc'
+import { isSung } from '../lyrics/sections'
+
+export interface OutroState {
+  /** First and last line of the repeated part (indices into `lines`), once picked. */
+  from: number | null
+  to: number | null
+  /** Lines added so far. */
+  taps: number
+  /** The lyrics as they were before adding the ending. */
+  lines: LyricLine[]
+}
 
 /**
- * Shown after the last lyric line when the song carries on well past it. Lyric files often leave
- * out an outro that repeats an earlier part; this lets you add that repeat yourself.
+ * Shown after the last lyric line when the song carries on past it, or when you've added lines.
+ * Lyric files often leave out an outro that repeats an earlier part, so you can tap it in: pick
+ * the repeated lines, then tap as each one is sung.
  */
 export function EndOfLyrics({
   endsAtMs,
   durationMs,
-  sections,
-  onAdd,
-  onUndo,
+  hasAdditions,
+  outro,
+  onStart,
+  onTap,
+  onUndoTap,
+  onFinish,
+  onRemoveAdditions,
 }: {
   /** Song time of the last lyric line. */
   endsAtMs: number
   durationMs: number
-  sections: Section[]
-  onAdd: (sectionIndex: number) => void
-  /** Present when the last addition can be undone. */
-  onUndo: (() => void) | null
+  hasAdditions: boolean
+  outro: OutroState | null
+  onStart: () => void
+  onTap: () => void
+  onUndoTap: () => void
+  onFinish: (keep: boolean) => void
+  onRemoveAdditions: () => void
 }) {
   const position = usePosition(250)
-  const [choice, setChoice] = useState(() => {
-    // The last repeated part (usually the chorus) is the most likely outro.
-    const repeated = [...sections].reverse().find((s) => s.repeatGroup)
-    return repeated?.index ?? sections.length - 1
-  })
-  const pastEnd = position > endsAtMs + 500
   const missing = durationMs - endsAtMs
 
+  if (!outro) {
+    return (
+      <div className="end-notice" onClick={(e) => e.stopPropagation()}>
+        {missing > 25000 && (
+          <p>
+            These lyrics end at <strong>{formatTime(endsAtMs)}</strong>, but the song runs to{' '}
+            <strong>{formatTime(durationMs)}</strong>. If the singing carries on, it&apos;s usually an earlier part
+            repeated. You can tap it in.
+          </p>
+        )}
+        <div className="end-notice-actions">
+          {missing > 25000 && (
+            <button className="btn btn-primary btn-small" onClick={onStart}>
+              Add the ending by tapping
+            </button>
+          )}
+          {hasAdditions && (
+            <button className="btn btn-small" onClick={onRemoveAdditions}>
+              Remove the lines you added
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // The repeated part, in order, without instrumental markers.
+  const sequence =
+    outro.from === null || outro.to === null
+      ? []
+      : outro.lines.slice(outro.from, outro.to + 1).filter(isSung)
+  const next = sequence.length > 0 ? sequence[outro.taps % sequence.length] : null
+
   return (
-    <div className="end-notice" onClick={(e) => e.stopPropagation()}>
-      {missing > 25000 && (
+    <div className="end-notice is-active" onClick={(e) => e.stopPropagation()}>
+      {outro.from === null ? (
         <p>
-          These lyrics end at <strong>{formatTime(endsAtMs)}</strong>, but the song runs to{' '}
-          <strong>{formatTime(durationMs)}</strong>. If the singing carries on, it&apos;s often a repeat of an
-          earlier part. Play to where it starts, pause, and add that part there.
+          <strong>Step 1:</strong> click the line in the lyrics above where the repeated part starts. Shift-click a
+          later line to loop back after it; otherwise it runs to the last line.
         </p>
+      ) : (
+        <>
+          <p>
+            <strong>{outro.taps === 0 ? 'Step 2' : `${outro.taps} added`}:</strong> repeating {sequence.length}{' '}
+            {sequence.length === 1 ? 'line' : 'lines'} (highlighted above). Play from just before the singing
+            comes back and press <kbd>Space</kbd> the moment each line starts. <kbd>Backspace</kbd> undoes a tap.
+            {outro.taps === 0 && ' You can still click a different line to change where it starts.'}
+          </p>
+          {next && (
+            <div className="end-notice-next">
+              <span className="muted small">Next line ({formatTime(position)})</span>
+              <span className="end-notice-next-text">{next.text}</span>
+            </div>
+          )}
+        </>
       )}
       <div className="end-notice-actions">
-        <select value={choice} onChange={(e) => setChoice(Number(e.target.value))} aria-label="Part to repeat">
-          {sections.map((s) => (
-            <option key={s.startLine} value={s.index}>
-              {s.repeatGroup ? `${s.repeatGroup} · ` : ''}
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <button className="btn btn-primary btn-small" disabled={!pastEnd} onClick={() => onAdd(choice)}>
-          {pastEnd ? `Add it at ${formatTime(position)}` : 'Play past the last line first'}
-        </button>
-        {onUndo && (
-          <button className="btn btn-small btn-ghost" onClick={onUndo}>
-            Undo last addition
-          </button>
+        {outro.from !== null && (
+          <>
+            <button className="btn btn-primary" onClick={onTap}>
+              Tap (Space)
+            </button>
+            <button className="btn btn-small" onClick={onUndoTap} disabled={outro.taps === 0}>
+              Undo tap
+            </button>
+          </>
         )}
+        <button className="btn btn-small" onClick={() => onFinish(true)} disabled={outro.taps === 0}>
+          Done
+        </button>
+        <button className="btn btn-small btn-ghost" onClick={() => onFinish(false)}>
+          Cancel{outro.taps > 0 ? ' (remove these)' : ''}
+        </button>
       </div>
     </div>
   )

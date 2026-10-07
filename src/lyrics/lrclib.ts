@@ -76,6 +76,10 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T | null> 
   return (await res.json()) as T
 }
 
+export async function getLrclibRecord(id: number, signal?: AbortSignal): Promise<LrclibRecord | null> {
+  return getJson<LrclibRecord>(`${BASE}/get/${id}`, signal)
+}
+
 export async function searchLrclib(
   params: Record<string, string>,
   signal?: AbortSignal,
