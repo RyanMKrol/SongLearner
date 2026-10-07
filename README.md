@@ -38,8 +38,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   skipping or peeking is marked learned and folds away, so you can see what's left and start
   from the first section you don't know yet.
 
-Everything you set up (sections, ratings, timing tweaks, lyrics) is saved in your browser's local
-storage.
+Everything you set up (the songs you're learning, lyrics and your edits to them, sections,
+ratings, reading fixes, timing tweaks, settings) is saved on disk in `data/` by the dev server.
+Deleting a song from the home page deletes everything saved for it.
 
 ## Keyboard shortcuts
 
@@ -111,12 +112,30 @@ The code is split by concern:
 - `src/spotify/`: login (PKCE), the Web API calls, and the Web Playback SDK wrapper.
 - `src/lyrics/`: the LRC parser, the LRCLIB client, section detection, and romaji.
 - `server/readingReview.ts`: the dev-server endpoint that asks Claude to check Japanese readings.
+- `server/diskStore.ts`: the dev-server endpoint that saves your data under `data/`.
+- `server/logSink.ts`: the dev-server endpoint that writes diagnostic logs under `logs/`.
 - `scripts/copy-kuromoji-dict.mjs`: copies the Japanese dictionary into `public/` before
   `dev` and `build` (it isn't committed).
 - `src/playback/`: the playback clock (smooths position between SDK updates) and the loop
   controller, which decides when to jump back during practice.
 - `src/practice/`: memorise-mode masking and local storage.
 - `src/components/`: the React UI.
+
+## Your data
+
+The dev server keeps everything in plain JSON files under `data/` (not committed):
+
+- `data/library.json`: the songs on your home page
+- `data/settings.json`: app settings
+- `data/songs/<trackId>.json`: one file per song, with its lyrics (including lines you've added)
+  and your progress, sections and reading fixes
+- `data/backups/`: before a file is overwritten or deleted, a timestamped copy is kept here (at
+  most one an hour per file)
+
+Files are written to a temporary file and then renamed, so a crash can't leave one half-written.
+The browser also keeps a copy as a fallback: if the dev server isn't running, changes are saved
+there and copied to disk the next time it is. The top bar shows whether everything is saved to
+disk. Only the Spotify login stays in the browser.
 
 ## Logs
 

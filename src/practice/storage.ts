@@ -1,6 +1,6 @@
 // Everything the app remembers lives in localStorage, keyed by Spotify track ID.
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { changedKeys, log, logWarn } from '../log'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { changedKeys, log, logDebug, logWarn } from '../log'
 import type { HideLevel } from './mask'
 
 /** 0 = not started, 1 = learning, 2 = almost, 3 = know it. */
@@ -61,24 +61,200 @@ export interface LibraryEntry {
 }
 
 const PREFIX = 'songlearner:'
+const STORE_URL = '/api/store'
+/** Keys whose latest value hasn't been confirmed on disk yet (survives a reload). */
+const UNSYNCED_KEY = `${PREFIX}unsynced`
+/** What's kept on disk. The Spotify login and other per-tab state stay in the browser. */
+const PERSISTED = /^(prefs:|lyrics:|library$|setting:)/
 
-function read<T>(key: string): T | null {
+// Everything is held in memory, loaded from disk at startup (see server/diskStore.ts). Each change
+// is saved to disk shortly after it's made, and mirrored to localStorage as a fallback copy.
+const cache = new Map<string, unknown>()
+let diskAvailable = false
+const pending = new Map<string, unknown>()
+let flushTimer: number | null = null
+const versions = new Map<string, number>()
+
+export type StorageStatus = 'loading' | 'saved' | 'saving' | 'error' | 'browser-only'
+let status: StorageStatus = 'loading'
+const statusListeners = new Set<() => void>()
+function setStatus(next: StorageStatus): void {
+  if (next === status) return
+  status = next
+  statusListeners.forEach((l) => l())
+}
+export function useStorageStatus(): StorageStatus {
+  return useSyncExternalStore(
+    (l) => {
+      statusListeners.add(l)
+      return () => statusListeners.delete(l)
+    },
+    () => status,
+  )
+}
+
+function readUnsynced(): Set<string> {
   try {
-    const raw = localStorage.getItem(PREFIX + key)
-    return raw ? (JSON.parse(raw) as T) : null
+    return new Set(JSON.parse(localStorage.getItem(UNSYNCED_KEY) ?? '[]') as string[])
   } catch {
-    return null
+    return new Set()
+  }
+}
+function writeUnsynced(keys: Set<string>): void {
+  try {
+    if (keys.size === 0) localStorage.removeItem(UNSYNCED_KEY)
+    else localStorage.setItem(UNSYNCED_KEY, JSON.stringify([...keys]))
+  } catch {
+    // Can't record it; the change is still in memory and queued for disk.
   }
 }
 
-function write(key: string, value: unknown): void {
+function mirrorToBrowser(key: string, value: unknown): void {
   try {
     if (value === null) localStorage.removeItem(PREFIX + key)
     else localStorage.setItem(PREFIX + key, JSON.stringify(value))
   } catch (e) {
-    // Storage full or blocked. Practice still works, it just won't be remembered.
-    logWarn('storage', 'write failed', { key, error: e })
+    logWarn('storage', 'browser copy failed', { key, error: e })
   }
+}
+
+function browserCopy(): Map<string, unknown> {
+  const out = new Map<string, unknown>()
+  for (let i = 0; i < localStorage.length; i++) {
+    const full = localStorage.key(i)
+    if (!full?.startsWith(PREFIX)) continue
+    const key = full.slice(PREFIX.length)
+    if (!PERSISTED.test(key)) continue
+    try {
+      out.set(key, JSON.parse(localStorage.getItem(full) ?? 'null'))
+    } catch {
+      // Unreadable entry; skip it.
+    }
+  }
+  return out
+}
+
+/**
+ * Loads everything from disk. Anything only in this browser (from before data moved to disk, or
+ * changed while the dev server was down) is copied to disk. Call once before rendering.
+ */
+export async function initStorage(): Promise<void> {
+  const browser = browserCopy()
+  let disk: Record<string, unknown> | null = null
+  try {
+    const res = await fetch(STORE_URL, { cache: 'no-store' })
+    if (res.ok) disk = (await res.json()) as Record<string, unknown>
+  } catch {
+    // Dev server not reachable.
+  }
+
+  if (!disk) {
+    for (const [k, v] of browser) cache.set(k, v)
+    setStatus('browser-only')
+    logWarn('storage', 'disk storage unavailable; using this browser only', { keys: browser.size })
+    return
+  }
+
+  diskAvailable = true
+  for (const [k, v] of Object.entries(disk)) cache.set(k, v)
+  const unsynced = readUnsynced()
+  let migrated = 0
+  for (const [k, v] of browser) {
+    // Browser wins only for keys disk has never seen, or ones changed here but not yet saved.
+    if (!(k in disk) || unsynced.has(k)) {
+      cache.set(k, v)
+      pending.set(k, v)
+      migrated++
+    }
+  }
+  for (const k of unsynced) {
+    if (!browser.has(k) && k in disk) {
+      // Deleted here while disk was unreachable.
+      cache.delete(k)
+      pending.set(k, null)
+    }
+  }
+  // Keep the browser copy matching disk.
+  for (const [k, v] of cache) mirrorToBrowser(k, v)
+  setStatus('saved')
+  log('storage', 'loaded from disk', { keys: cache.size, copiedFromBrowser: migrated })
+  if (pending.size > 0) scheduleFlush(0)
+}
+
+function scheduleFlush(delay = 300): void {
+  if (!diskAvailable) return
+  if (flushTimer !== null) window.clearTimeout(flushTimer)
+  flushTimer = window.setTimeout(() => {
+    flushTimer = null
+    void flush()
+  }, delay)
+}
+
+function takeBatch() {
+  const set: Record<string, unknown> = {}
+  const remove: string[] = []
+  const sent = new Map<string, number>()
+  for (const [k, v] of pending) {
+    if (v === null) remove.push(k)
+    else set[k] = v
+    sent.set(k, versions.get(k) ?? 0)
+  }
+  pending.clear()
+  return { set, remove, sent }
+}
+
+async function flush(): Promise<void> {
+  if (pending.size === 0) return
+  const { set, remove, sent } = takeBatch()
+  setStatus('saving')
+  try {
+    const res = await fetch(STORE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ set, remove }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    // Only clear keys that haven't changed again since this batch was sent.
+    const unsynced = readUnsynced()
+    for (const [k, version] of sent) if ((versions.get(k) ?? 0) === version) unsynced.delete(k)
+    writeUnsynced(unsynced)
+    logDebug('storage', 'saved to disk', { set: Object.keys(set), removed: remove })
+    setStatus(pending.size > 0 ? 'saving' : 'saved')
+  } catch (e) {
+    // Put the batch back (newer changes win) and try again shortly.
+    for (const [k, v] of Object.entries(set)) if (!pending.has(k)) pending.set(k, v)
+    for (const k of remove) if (!pending.has(k)) pending.set(k, null)
+    setStatus('error')
+    logWarn('storage', 'saving to disk failed; will retry', { error: e, keys: pending.size })
+    scheduleFlush(5000)
+  }
+}
+
+if (typeof window !== 'undefined') {
+  // Last-moment save when the tab closes.
+  window.addEventListener('pagehide', () => {
+    if (!diskAvailable || pending.size === 0) return
+    const { set, remove } = takeBatch()
+    navigator.sendBeacon?.(STORE_URL, new Blob([JSON.stringify({ set, remove })], { type: 'application/json' }))
+  })
+}
+
+function read<T>(key: string): T | null {
+  return (cache.get(key) as T | undefined) ?? null
+}
+
+function write(key: string, value: unknown): void {
+  if (value === null) cache.delete(key)
+  else cache.set(key, value)
+  mirrorToBrowser(key, value)
+  if (!diskAvailable) return
+  versions.set(key, (versions.get(key) ?? 0) + 1)
+  pending.set(key, value)
+  const unsynced = readUnsynced()
+  unsynced.add(key)
+  writeUnsynced(unsynced)
+  setStatus('saving')
+  scheduleFlush()
 }
 
 export const defaultPrefs = (): TrackPrefs => ({
@@ -149,11 +325,20 @@ export function addToLibrary(entry: Omit<LibraryEntry, 'lastOpened'>): void {
   write('library', [{ ...entry, lastOpened: Date.now() }, ...others].slice(0, 200))
 }
 
-export function removeFromLibrary(trackId: string): void {
+/** Forgets a song entirely: its place in the library, lyrics, edits, sections and progress. */
+export function deleteSong(trackId: string): void {
+  log('storage', 'deleting song', { trackId })
   write(
     'library',
     loadLibrary().filter((e) => e.id !== trackId),
   )
+  write(`prefs:${trackId}`, null)
+  write(`lyrics:${trackId}`, null)
+  try {
+    sessionStorage.removeItem(`songlearner:test-mode:${trackId}`)
+  } catch {
+    // Nothing to clear.
+  }
 }
 
 /** Fraction of sections marked as known, for the library overview. */

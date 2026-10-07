@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlayer } from '../hooks'
+import { useStorageStatus } from '../practice/storage'
 import { playTrack, searchTracks, type SpotifyTrack } from '../spotify/api'
 import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
@@ -17,11 +18,25 @@ export function TopBar({ onHome, onLogout, onPicked }: Props) {
         Song<span className="accent">Learner</span>
       </button>
       <SearchBox onPicked={onPicked} />
+      <SaveStatus />
       <button className="btn btn-ghost" onClick={onLogout}>
         Log out
       </button>
     </header>
   )
+}
+
+/** Whether your songs and progress are safely on disk. */
+function SaveStatus() {
+  const status = useStorageStatus()
+  const text = {
+    loading: 'Loading…',
+    saved: '✓ Saved to disk',
+    saving: 'Saving…',
+    error: "⚠ Couldn't save to disk, retrying",
+    'browser-only': '⚠ Not saving to disk (dev server unreachable)',
+  }[status]
+  return <span className={`save-status save-${status}`}>{text}</span>
 }
 
 function SearchBox({ onPicked }: { onPicked: () => void }) {

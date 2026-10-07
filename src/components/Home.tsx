@@ -3,12 +3,13 @@ import { usePlayer } from '../hooks'
 import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
 import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
-import { loadLibrary, masterySummary, removeFromLibrary, type LibraryEntry } from '../practice/storage'
+import { deleteSong, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
 
 export function Home({ onOpenSong }: { onOpenSong: () => void }) {
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const ready = player.status === 'ready' && player.deviceId
 
   const open = async (entry: LibraryEntry) => {
@@ -97,14 +98,36 @@ export function Home({ onOpenSong }: { onOpenSong: () => void }) {
                   </button>
                   <button
                     className="library-remove"
-                    title="Remove from your songs"
-                    onClick={() => {
-                      removeFromLibrary(entry.id)
-                      setLibrary(loadLibrary())
-                    }}
+                    title="Delete this song and everything saved for it"
+                    aria-label={`Delete ${entry.name}`}
+                    onClick={() => setConfirmDelete(entry.id)}
                   >
                     ×
                   </button>
+                  {confirmDelete === entry.id && (
+                    <div className="library-confirm" role="alertdialog" aria-label={`Delete ${entry.name}?`}>
+                      <p className="small">
+                        Delete <strong>{entry.name}</strong> and everything saved for it: lyrics, your edits, sections
+                        and progress?
+                      </p>
+                      <div className="library-confirm-actions">
+                        <button
+                          className="btn btn-small btn-danger"
+                          onClick={() => {
+                            log('home', 'delete song', { trackId: entry.id })
+                            deleteSong(entry.id)
+                            setConfirmDelete(null)
+                            setLibrary(loadLibrary())
+                          }}
+                        >
+                          Delete
+                        </button>
+                        <button className="btn btn-small" onClick={() => setConfirmDelete(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}

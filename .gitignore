@@ -28,3 +28,6 @@ public/kuromoji-dict
 
 # Diagnostic logs written by the dev server (server/logSink.ts)
 logs/
+
+# Your songs, edits and progress (server/diskStore.ts). Not committed: personal data.
+data/
