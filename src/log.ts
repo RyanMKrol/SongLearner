@@ -70,7 +70,7 @@ export function log(scope: string, event: string, data?: Record<string, unknown>
   recent.push(entry)
   if (recent.length > MEMORY_LIMIT) recent.splice(0, recent.length - MEMORY_LIMIT)
   if (sinkAvailable) pending.push(entry)
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.debug
     fn(`[${scope}] ${event}`, data ?? '')
   }
@@ -82,7 +82,8 @@ export const logError = (scope: string, event: string, data?: Record<string, unk
 export const logDebug = (scope: string, event: string, data?: Record<string, unknown>) => log(scope, event, data, 'debug')
 
 function scheduleFlush(): void {
-  if (timer !== null || !sinkAvailable) return
+  // Outside a browser (e.g. tests) there's nowhere to send logs.
+  if (timer !== null || !sinkAvailable || typeof window === 'undefined') return
   timer = window.setTimeout(() => {
     timer = null
     void flush()

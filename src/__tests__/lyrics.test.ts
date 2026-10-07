@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { appendTapped, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
-import { cleanTrackName, pickBest, type LrclibRecord } from '../lyrics/lrclib'
+import { chooseRecord, cleanTrackName, fixLongVowels, normaliseName, type LrclibRecord } from '../lyrics/lrclib'
 import { autoSectionStarts, buildSections, sectionTimings } from '../lyrics/sections'
 
 // Made-up lyrics shaped like a typical LRCLIB file: verse, chorus, verse, chorus, outro.
@@ -144,20 +144,40 @@ describe('lrclib helpers', () => {
     ...over,
   })
 
-  it('prefers timed lyrics with a matching duration', () => {
-    const best = pickBest(
+  const track = { name: 'Made Up Song', artist: 'Test Band', durationMs: 200_000 }
+
+  it('prefers timed lyrics from a recording of the same length', () => {
+    const best = chooseRecord(
       [
-        record({ id: 1, duration: 200, syncedLyrics: null }),
-        record({ id: 2, duration: 260, syncedLyrics: '[00:01.00]x' }),
-        record({ id: 3, duration: 201, syncedLyrics: '[00:01.00]x' }),
+        record({ id: 1, trackName: 'Made Up Song', duration: 200, syncedLyrics: null }),
+        record({ id: 2, trackName: 'Made Up Song', duration: 260, syncedLyrics: '[00:01.00]x' }),
+        record({ id: 3, trackName: 'Made Up Song', duration: 201, syncedLyrics: '[00:01.00]x' }),
       ],
-      200_000,
+      track,
     )
-    expect(best?.id).toBe(3)
+    expect(best).toMatchObject({ record: { id: 3 }, timed: true })
+  })
+
+  it('never picks a different song, even when it is the only result', () => {
+    const other = record({ id: 9, trackName: 'Another Song', artistName: 'Test Band', duration: 186, syncedLyrics: '[00:01.00]x' })
+    expect(chooseRecord([other], track)).toBeNull()
+  })
+
+  it("uses another recording's words but not its timing", () => {
+    const cover = record({ id: 4, trackName: 'Made Up Song', artistName: 'Original Band', duration: 245, syncedLyrics: '[00:01.00]x' })
+    expect(chooseRecord([cover], track)).toMatchObject({ record: { id: 4 }, timed: false })
+  })
+
+  it('matches names despite spacing, punctuation, width and hyphens for long vowels', () => {
+    expect(fixLongVowels('パ-ランマウム')).toBe('パーランマウム')
+    expect(normaliseName('リンダ・リンダ')).toBe(normaliseName('リンダ リンダ'))
+    expect(normaliseName('ＡＢＣ　Song!')).toBe('abcsong')
+    const r = record({ id: 5, trackName: 'リンダ リンダ - Linda Linda', artistName: 'パーランマウム', duration: 159, syncedLyrics: '[00:01.00]x' })
+    expect(chooseRecord([r], { name: 'リンダ リンダ', artist: 'パ-ランマウム', durationMs: 158_573 })).toMatchObject({ timed: true })
   })
 
   it('returns null when nothing has lyrics', () => {
-    expect(pickBest([record({ plainLyrics: null })], 200_000)).toBeNull()
+    expect(chooseRecord([record({ plainLyrics: null })], track)).toBeNull()
   })
 })
 

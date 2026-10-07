@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { log, logError, logWarn } from './log'
 import type { LyricLine } from './lyrics/lrc'
-import { findLyrics } from './lyrics/lrclib'
+import { chooseRecord, findLyrics, getLrclibRecord } from './lyrics/lrclib'
 import { hasJapanese, romanizeLines, type ReadingFixes, type RomajiLine } from './lyrics/romaji'
 import { LoopController, type LoopOptions, type LoopStatus, type PracticeStep } from './playback/loop'
 import { TestTracker, type TestSpan } from './playback/testTracker'
-import { loadSavedLyrics, saveLyrics, type SavedLyrics } from './practice/storage'
+import { loadSavedLyrics, saveLyrics, updatePrefs, type SavedLyrics } from './practice/storage'
 import { playerController, type PlayerTrack } from './spotify/player'
 
 export function usePlayer() {
@@ -60,8 +60,42 @@ export function useLyrics(track: PlayerTrack) {
 
   useEffect(() => {
     if (initial.status === 'ready') {
-      log('lyrics', 'loaded from storage', { trackId: track.id, source: initial.lyrics.source, synced: initial.lyrics.synced, lrclibId: initial.lyrics.lrclibId })
-      return
+      const saved = initial.lyrics
+      log('lyrics', 'loaded from storage', { trackId: track.id, source: saved.source, synced: saved.synced, lrclibId: saved.lrclibId, verified: saved.verified ?? false })
+      // Lyrics saved before the name check existed could be another song's. Check once.
+      if (saved.source !== 'lrclib' || saved.verified || saved.lrclibId === undefined || saved.addedFromLine !== undefined) return
+      const controller = new AbortController()
+      getLrclibRecord(saved.lrclibId, controller.signal)
+        .then((record) => {
+          if (!record) return
+          const ok = chooseRecord([record], { name: track.name, artist: track.artists[0] ?? '', durationMs: track.durationMs })
+          if (ok) {
+            saveLyrics(track.id, { ...saved, verified: true })
+            log('lyrics', 'saved lyrics checked: right song', { trackId: track.id, lrclibId: record.id })
+          } else {
+            logWarn('lyrics', 'saved lyrics were for a different song; looking up again', {
+              trackId: track.id,
+              lrclibId: record.id,
+              savedName: record.trackName,
+              savedArtist: record.artistName,
+            })
+            saveLyrics(track.id, null)
+            // Sections, ratings and memorise settings belonged to the wrong lyrics' lines.
+            updatePrefs(track.id, (p) => ({
+              ...p,
+              sectionStarts: undefined,
+              sectionNames: {},
+              mastery: {},
+              hide: {},
+              progress: undefined,
+            }))
+            setReloadKey((k) => k + 1)
+          }
+        })
+        .catch(() => {
+          // Couldn't check right now (LRCLIB down); try again next time the song opens.
+        })
+      return () => controller.abort()
     }
     const controller = new AbortController()
     const started = performance.now()
@@ -91,8 +125,9 @@ export function useLyrics(track: PlayerTrack) {
           synced: found.synced,
           instrumental: found.instrumental,
           source: 'lrclib',
-          label: `LRCLIB: ${found.record.artistName}, ${found.record.albumName ?? 'unknown album'}`,
+          label: `LRCLIB: ${found.record.artistName}, ${found.record.albumName ?? 'unknown album'}${found.synced || !found.record.syncedLyrics ? '' : ' (timed for a different recording, so shown untimed)'}`,
           lrclibId: found.record.id,
+          verified: true,
         }
         saveLyrics(track.id, lyrics)
         setState({ key, value: { status: 'ready', lyrics } })

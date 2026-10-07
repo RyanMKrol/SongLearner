@@ -65,6 +65,8 @@ export interface SavedLyrics {
   lrclibId?: number
   /** Lines from this index on were added by you at the end (see EndOfLyrics). */
   addedFromLine?: number
+  /** Set once the LRCLIB entry has been checked to really be this song. */
+  verified?: boolean
 }
 
 export interface LibraryEntry {
