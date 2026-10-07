@@ -20,6 +20,8 @@ interface Props {
   /** When on, romaji words are buttons for correcting their reading. */
   fixReadings: boolean
   onWordClick: (word: RomajiWord) => void
+  /** Picks a reading from a word's hover menu; null means the dictionary reading. */
+  onChooseReading: (word: RomajiWord, reading: string | null) => void
   /** Lines being practised right now; everything else is dimmed. */
   activeLines: { from: number; to: number } | null
   selection: { from: number; to: number } | null
@@ -165,6 +167,8 @@ export function LyricsPane(props: Props) {
                     peek={props.peek}
                     fixMode={props.fixReadings}
                     onWordClick={props.onWordClick}
+                    // Hover menus would give the words away in test mode.
+                    onChooseReading={test ? undefined : props.onChooseReading}
                   />
                   </span>
                 ) : (

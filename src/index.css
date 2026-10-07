@@ -549,6 +549,98 @@ kbd {
   text-decoration-color: var(--warn);
 }
 
+/* Hover menu for switching a word's reading. */
+.hint-word {
+  position: relative;
+  display: inline-block;
+}
+
+.hint-word .romaji-word {
+  cursor: pointer;
+  outline: none;
+}
+
+.hint-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  min-width: 150px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  /* An invisible bridge above the menu keeps hover alive while moving the mouse onto it. */
+  margin-top: 0;
+  border-top: 6px solid transparent;
+  background-clip: padding-box;
+  background-color: var(--panel);
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 12px 30px rgba(0, 0, 0, 0.55);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  color: var(--text);
+  opacity: 1;
+}
+
+.hint-word:hover .hint-menu,
+.hint-word:focus-within .hint-menu {
+  display: flex;
+}
+
+.hint-menu-head {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 2px 8px 4px;
+}
+
+.hint-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.hint-option:hover {
+  background: var(--accent-soft);
+}
+
+.hint-option.is-current {
+  color: var(--good);
+}
+
+.hint-check {
+  width: 12px;
+  display: inline-block;
+}
+
+.hint-note {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.hint-other {
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  margin-top: 2px;
+}
+
 .romaji-word.is-fixed {
   color: var(--good);
 }

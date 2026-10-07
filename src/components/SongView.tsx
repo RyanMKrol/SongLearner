@@ -50,7 +50,24 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const [editSplits, setEditSplits] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
   const peek = useKeyHeld('h')
-  const [testMode, setTestMode] = useState(false)
+  // Remembered per song for this browser tab, so a refresh (or any rebuild of this screen)
+  // doesn't drop you out of a test halfway through.
+  const testModeKey = `songlearner:test-mode:${track.id}`
+  const [testMode, setTestMode] = useState(() => {
+    try {
+      return sessionStorage.getItem(testModeKey) === '1'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    try {
+      if (testMode) sessionStorage.setItem(testModeKey, '1')
+      else sessionStorage.removeItem(testModeKey)
+    } catch {
+      // Storage blocked: test mode just won't survive a refresh.
+    }
+  }, [testMode, testModeKey])
   const [justPassed, setJustPassed] = useState<number | null>(null)
   const [romajiMode, setRomajiMode] = useLocalSetting<RomajiMode>('romaji', 'below')
   const [fixReadings, setFixReadings] = useState(false)
@@ -123,6 +140,28 @@ export function SongView({ track }: { track: PlayerTrack }) {
     },
     [track.name, track.artists, track.album, lines, updatePrefs],
   )
+  /** Sets how a word is sung in this song, or null to go back to the dictionary reading. */
+  const saveReading = useCallback(
+    (word: RomajiWord, reading: string | null) => {
+      updatePrefs((p) => {
+        const readings = { ...p.readings }
+        const backToDictionary = reading === null || reading === word.standard
+        if (backToDictionary) delete readings[word.source]
+        else readings[word.source] = reading
+        // Going back to the dictionary reading also switches off Claude's suggestion for it.
+        const aiReview =
+          backToDictionary && p.aiReview
+            ? {
+                ...p.aiReview,
+                suggestions: p.aiReview.suggestions.map((s) => (s.source === word.source ? { ...s, applied: false } : s)),
+              }
+            : p.aiReview
+        return { ...p, readings, aiReview }
+      })
+    },
+    [updatePrefs],
+  )
+
   /** Every distinct Japanese word with its dictionary romaji, for the review. */
   const reviewWords = useMemo(() => {
     const seen = new Map<string, string>()
@@ -468,6 +507,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
               romaji={romajiLines}
               fixReadings={fixReadings && romajiLines !== null}
               onWordClick={setFixingWord}
+              onChooseReading={saveReading}
               romajiMode={romajiMode}
               currentLine={currentLine}
               hideFor={hideFor}
@@ -782,23 +822,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
           word={fixingWord}
           onClose={() => setFixingWord(null)}
           onSave={(reading) => {
-            updatePrefs((p) => {
-              const readings = { ...p.readings }
-              const backToDictionary = reading === null || reading === fixingWord.standard
-              if (backToDictionary) delete readings[fixingWord.source]
-              else readings[fixingWord.source] = reading
-              // Going back to the dictionary reading also switches off Claude's suggestion for it.
-              const aiReview =
-                backToDictionary && p.aiReview
-                  ? {
-                      ...p.aiReview,
-                      suggestions: p.aiReview.suggestions.map((s) =>
-                        s.source === fixingWord.source ? { ...s, applied: false } : s,
-                      ),
-                    }
-                  : p.aiReview
-              return { ...p, readings, aiReview }
-            })
+            saveReading(fixingWord, reading)
             setFixingWord(null)
           }}
         />

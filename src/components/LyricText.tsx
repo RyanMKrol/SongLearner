@@ -24,18 +24,69 @@ export function LyricText({ text, level, peek }: { text: string; level: HideLeve
  * Romaji for a line, word by word. Words that songs often read differently get a dotted
  * underline; in fix mode every Japanese word becomes a button for correcting its reading.
  */
+/**
+ * A word with a known alternative reading (or one you've changed). Hovering shows a small menu
+ * to switch readings; "Other…" opens the full dialog for typing one in.
+ */
+function HintWord({
+  word,
+  className,
+  onChooseReading,
+  onOther,
+}: {
+  word: RomajiWord
+  className: string
+  onChooseReading: (word: RomajiWord, reading: string | null) => void
+  onOther?: (word: RomajiWord) => void
+}) {
+  const options = [...new Set([word.standard, ...word.alternatives, word.text])]
+  return (
+    <span className="hint-word" onClick={(e) => e.stopPropagation()}>
+      <span className={className} tabIndex={0}>
+        {word.text}
+      </span>
+      <span className="hint-menu" role="menu" aria-label={`Readings for ${word.source}`}>
+        <span className="hint-menu-head" lang="ja">
+          {word.source}
+        </span>
+        {options.map((option) => (
+          <button
+            key={option}
+            role="menuitemradio"
+            aria-checked={option === word.text}
+            className={`hint-option ${option === word.text ? 'is-current' : ''}`}
+            onClick={() => onChooseReading(word, option === word.standard ? null : option)}
+          >
+            <span className="hint-check">{option === word.text ? '✓' : ''}</span>
+            {option}
+            {option === word.standard && <span className="hint-note">dictionary</span>}
+          </button>
+        ))}
+        {onOther && (
+          <button role="menuitem" className="hint-option hint-other" onClick={() => onOther(word)}>
+            <span className="hint-check" />
+            Other…
+          </button>
+        )}
+      </span>
+    </span>
+  )
+}
+
 function RomajiWords({
   line,
   level,
   peek,
   fixMode,
   onWordClick,
+  onChooseReading,
 }: {
   line: RomajiLine
   level: HideLevel
   peek: boolean
   fixMode: boolean
   onWordClick?: (word: RomajiWord) => void
+  onChooseReading?: (word: RomajiWord, reading: string | null) => void
 }) {
   // Hidden words are drawn by LyricText; word-level styling only matters when they're visible.
   if (level !== 0 && !peek && !fixMode) return <LyricText text={line.text} level={level} peek={peek} />
@@ -67,6 +118,8 @@ function RomajiWords({
               >
                 {word.text}
               </button>
+            ) : onChooseReading && (hint || word.fixed) ? (
+              <HintWord word={word} className={className} onChooseReading={onChooseReading} onOther={onWordClick} />
             ) : (
               <span className={className} title={title}>
                 {word.text}
@@ -91,6 +144,7 @@ export function LyricWithRomaji({
   peek,
   fixMode = false,
   onWordClick,
+  onChooseReading,
 }: {
   text: string
   romaji: RomajiLine | null | undefined
@@ -99,9 +153,19 @@ export function LyricWithRomaji({
   peek: boolean
   fixMode?: boolean
   onWordClick?: (word: RomajiWord) => void
+  onChooseReading?: (word: RomajiWord, reading: string | null) => void
 }) {
   if (!romaji || mode === 'off') return <LyricText text={text} level={level} peek={peek} />
-  const words = <RomajiWords line={romaji} level={level} peek={peek} fixMode={fixMode} onWordClick={onWordClick} />
+  const words = (
+    <RomajiWords
+      line={romaji}
+      level={level}
+      peek={peek}
+      fixMode={fixMode}
+      onWordClick={onWordClick}
+      onChooseReading={onChooseReading}
+    />
+  )
   if (mode === 'only') return words
   return (
     <>

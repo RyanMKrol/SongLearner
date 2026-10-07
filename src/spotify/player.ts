@@ -71,6 +71,8 @@ class PlayerController {
   readonly clock = new PlaybackClock()
   private player: Spotify.Player | null = null
   private pollTimer: number | null = null
+  /** Every ID and URI the SDK has used for the current track. */
+  private currentTrackKeys = new Set<string>()
   private listeners = new Set<() => void>()
   private snapshot: PlayerSnapshot = {
     status: 'idle',
@@ -152,14 +154,23 @@ class PlayerController {
     const position = state.paused || lag < 0 || lag > 2000 ? state.position : state.position + lag
     this.clock.sync(position, state.paused, state.duration)
 
+    // Keep the same track object unless a genuinely different song starts, so the song screen
+    // isn't rebuilt (and doesn't lose test mode or a running loop) over a glitchy report. The SDK
+    // can briefly report no track, or the same song under its relinked ID instead of the original.
     const current = state.track_window.current_track
-    const track = current ? toTrack(current) : null
-    const sameTrack = track?.id === this.snapshot.track?.id
-    this.update({
-      track: sameTrack ? this.snapshot.track : track,
-      paused: state.paused,
-      version: this.snapshot.version + 1,
-    })
+    let track = this.snapshot.track
+    if (current) {
+      const keys = [current.id, current.uri, current.linked_from?.id, current.linked_from?.uri].filter(
+        (k): k is string => Boolean(k),
+      )
+      if (track && keys.some((k) => this.currentTrackKeys.has(k))) {
+        keys.forEach((k) => this.currentTrackKeys.add(k))
+      } else {
+        track = toTrack(current)
+        this.currentTrackKeys = new Set(keys)
+      }
+    }
+    this.update({ track, paused: state.paused, version: this.snapshot.version + 1 })
   }
 
   private async poll(): Promise<void> {
