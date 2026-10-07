@@ -85,7 +85,7 @@ const STORE_URL = '/api/store'
 /** Keys whose latest value hasn't been confirmed on disk yet (survives a reload). */
 const UNSYNCED_KEY = `${PREFIX}unsynced`
 /** What's kept on disk. The Spotify login and other per-tab state stay in the browser. */
-const PERSISTED = /^(prefs:|lyrics:|library$|setting:)/
+const PERSISTED = /^(prefs:|lyrics:|library$|playlists$|setting:)/
 
 // Everything is held in memory, loaded from disk at startup (see server/diskStore.ts). Each change
 // is saved to disk shortly after it's made, and mirrored to localStorage as a fallback copy.
@@ -347,9 +347,13 @@ export function addToLibrary(entry: Omit<LibraryEntry, 'lastOpened'>): void {
   write('library', [{ ...entry, lastOpened: Date.now() }, ...others].slice(0, 200))
 }
 
-/** Forgets a song entirely: its place in the library, lyrics, edits, sections and progress. */
+/** Forgets a song entirely: its place in the library and playlists, lyrics, edits and progress. */
 export function deleteSong(trackId: string): void {
   log('storage', 'deleting song', { trackId })
+  const playlists = loadPlaylists()
+  if (playlists.some((p) => p.trackIds.includes(trackId))) {
+    savePlaylists(playlists.map((p) => ({ ...p, trackIds: p.trackIds.filter((id) => id !== trackId) })))
+  }
   write(
     'library',
     loadLibrary().filter((e) => e.id !== trackId),
@@ -376,10 +380,20 @@ export function masterySummary(trackId: string): { known: number; total: number;
   return { known: values.filter((v) => v === 3).length, total: values.length, complete: false }
 }
 
-export interface LearnedSong extends LibraryEntry {
-  completedAt: number
+/** A song as it appears in a list that can be played through (a playlist or the karaoke set). */
+export interface SetSong extends LibraryEntry {
+  /** Number of sections, if the song has been opened since progress was recorded (else 0). */
   sections: number
   rehearsals: Rehearsal[]
+}
+
+export interface LearnedSong extends SetSong {
+  completedAt: number
+}
+
+export function toSetSong(entry: LibraryEntry): SetSong {
+  const prefs = read<TrackPrefs>(`prefs:${entry.id}`)
+  return { ...entry, sections: prefs?.progress?.sections ?? 0, rehearsals: prefs?.rehearsals ?? [] }
 }
 
 /** Songs with every section learned: the karaoke set. Most recently learned first. */
@@ -411,4 +425,93 @@ export function useLocalSetting<T>(key: string, initial: T) {
     write(`setting:${key}`, value)
   }, [key, value])
   return [value, setValue] as const
+}
+
+// --- Playlists ---------------------------------------------------------------------------------
+
+export interface Playlist {
+  id: string
+  name: string
+  /** In play order. */
+  trackIds: string[]
+  createdAt: number
+}
+
+const NO_PLAYLISTS: Playlist[] = []
+const playlistListeners = new Set<() => void>()
+
+export function loadPlaylists(): Playlist[] {
+  return read<Playlist[]>('playlists') ?? NO_PLAYLISTS
+}
+
+function savePlaylists(playlists: Playlist[]): void {
+  write('playlists', playlists)
+  playlistListeners.forEach((l) => l())
+}
+
+/** All playlists; re-renders when they change. */
+export function usePlaylists(): Playlist[] {
+  return useSyncExternalStore(
+    (l) => {
+      playlistListeners.add(l)
+      return () => playlistListeners.delete(l)
+    },
+    loadPlaylists,
+  )
+}
+
+function changePlaylist(id: string, change: (p: Playlist) => Playlist): void {
+  savePlaylists(loadPlaylists().map((p) => (p.id === id ? change(p) : p)))
+}
+
+export function createPlaylist(name: string, firstTrackId?: string): Playlist {
+  const playlist: Playlist = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: name.trim() || 'New playlist',
+    trackIds: firstTrackId ? [firstTrackId] : [],
+    createdAt: Date.now(),
+  }
+  log('playlists', 'created', { id: playlist.id, name: playlist.name, firstTrackId })
+  savePlaylists([...loadPlaylists(), playlist])
+  return playlist
+}
+
+export function renamePlaylist(id: string, name: string): void {
+  if (!name.trim()) return
+  log('playlists', 'renamed', { id, name })
+  changePlaylist(id, (p) => ({ ...p, name: name.trim() }))
+}
+
+export function deletePlaylist(id: string): void {
+  log('playlists', 'deleted', { id })
+  savePlaylists(loadPlaylists().filter((p) => p.id !== id))
+}
+
+/** Adds the song to the playlist, or removes it if it's already there. */
+export function togglePlaylistSong(id: string, trackId: string): void {
+  changePlaylist(id, (p) => {
+    const inList = p.trackIds.includes(trackId)
+    log('playlists', inList ? 'song removed' : 'song added', { id, trackId })
+    return { ...p, trackIds: inList ? p.trackIds.filter((t) => t !== trackId) : [...p.trackIds, trackId] }
+  })
+}
+
+export function movePlaylistSong(id: string, from: number, to: number): void {
+  changePlaylist(id, (p) => {
+    if (to < 0 || to >= p.trackIds.length) return p
+    const trackIds = [...p.trackIds]
+    const [moved] = trackIds.splice(from, 1)
+    trackIds.splice(to, 0, moved)
+    log('playlists', 'reordered', { id, from, to })
+    return { ...p, trackIds }
+  })
+}
+
+/** A playlist's songs, in order (songs no longer in the library are skipped). */
+export function playlistSongs(playlist: Playlist): SetSong[] {
+  const library = new Map(loadLibrary().map((e) => [e.id, e]))
+  return playlist.trackIds.flatMap((id) => {
+    const entry = library.get(id)
+    return entry ? [toSetSong(entry)] : []
+  })
 }

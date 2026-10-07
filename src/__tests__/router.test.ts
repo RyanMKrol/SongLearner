@@ -3,7 +3,12 @@ import { parseRoute, routePath } from '../router'
 
 describe('routes', () => {
   it('round-trips each screen', () => {
-    for (const route of [{ name: 'home' }, { name: 'karaoke' }, { name: 'song', trackId: '4J2oDU9oacz7lJ7H8A8P8v' }] as const) {
+    for (const route of [
+      { name: 'home' },
+      { name: 'karaoke' },
+      { name: 'song', trackId: '4J2oDU9oacz7lJ7H8A8P8v' },
+      { name: 'playlist', playlistId: 'abc123' },
+    ] as const) {
       expect(parseRoute(routePath(route))).toEqual(route)
     }
   })

@@ -1,11 +1,12 @@
-// The karaoke set: an automatic playlist of every song you've fully learned, sung from memory.
-// Songs play one after another with the lyrics blurred (test mode). Sections you get through
-// without pausing, skipping or peeking count, and each song's score is saved with it.
-// The page itself is in components/Karaoke.tsx.
+// Plays a list of songs back to back: a playlist, or the karaoke set (every song you've fully
+// learned). In a test run the lyrics are blurred; sections you get through without pausing,
+// skipping or peeking count, each song's score is saved with it, and you get results at the end.
+// The pages are components/Karaoke.tsx and components/Playlists.tsx.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePlayer } from './hooks'
 import { log, logError } from './log'
-import { loadLearnedSongs, updatePrefs, type LearnedSong } from './practice/storage'
+import { loadLearnedSongs, updatePrefs, type LearnedSong, type SetSong } from './practice/storage'
+import { navigate, type Route } from './router'
 import { playTrack } from './spotify/api'
 import { playerController } from './spotify/player'
 
@@ -15,7 +16,7 @@ const GAP_BETWEEN_SONGS_MS = 2500
 const END_TOLERANCE_MS = 3000
 
 export interface SongResult {
-  song: LearnedSong
+  song: SetSong
   /** Section start lines sung through without help. */
   passed: number[]
   /** True once "send back to learning" has been used. */
@@ -23,7 +24,13 @@ export interface SongResult {
 }
 
 interface SetState {
-  queue: LearnedSong[]
+  /** Shown in the banner, e.g. "Karaoke set" or a playlist's name. */
+  title: string
+  /** Test run: words blurred, scores recorded, results at the end. */
+  test: boolean
+  /** Where to go when a plain (non-test) run finishes. */
+  returnTo: Route
+  queue: SetSong[]
   index: number
   passed: Record<string, number[]>
   results: SongResult[]
@@ -32,7 +39,7 @@ interface SetState {
 
 export type KaraokeOrder = 'recent' | 'least-rehearsed' | 'shuffle'
 
-function ordered(songs: LearnedSong[], order: KaraokeOrder): LearnedSong[] {
+export function ordered<T extends SetSong>(songs: T[], order: KaraokeOrder): T[] {
   if (order === 'shuffle') {
     const out = [...songs]
     for (let i = out.length - 1; i > 0; i--) {
@@ -42,14 +49,20 @@ function ordered(songs: LearnedSong[], order: KaraokeOrder): LearnedSong[] {
     return out
   }
   if (order === 'least-rehearsed') {
-    const last = (s: LearnedSong) => s.rehearsals.at(-1)?.at ?? 0
+    const last = (s: SetSong) => s.rehearsals.at(-1)?.at ?? 0
     return [...songs].sort((a, b) => last(a) - last(b))
   }
   return songs
 }
 
-/** Runs a karaoke set: plays each song, moves on when it ends, and records the results. */
-export function useKaraokeSet() {
+export interface StartOptions {
+  title: string
+  test: boolean
+  returnTo: Route
+}
+
+/** Runs a set of songs: plays each one, moves on when it ends, and records test results. */
+export function useSongSet() {
   const player = usePlayer()
   const [state, setState] = useState<SetState | null>(null)
   const stateRef = useRef(state)
@@ -65,17 +78,28 @@ export function useKaraokeSet() {
     if (!s || s.finished) return
     const song = s.queue[s.index]
     const passed = s.passed[song.id] ?? []
-    log('karaoke', 'song done', { trackId: song.id, reason, passed: passed.length, total: song.sections })
-    updatePrefs(song.id, (p) => ({
-      ...p,
-      rehearsals: [...(p.rehearsals ?? []), { at: Date.now(), passed: passed.length, total: song.sections }],
-    }))
+    log('karaoke', 'song done', { title: s.title, trackId: song.id, reason, passed: passed.length, total: song.sections })
+    if (s.test) {
+      // Section counts are refreshed from the song's progress, which updates as it's played.
+      updatePrefs(song.id, (p) => ({
+        ...p,
+        rehearsals: [
+          ...(p.rehearsals ?? []),
+          { at: Date.now(), passed: passed.length, total: p.progress?.sections ?? song.sections },
+        ],
+      }))
+    }
     const results = [...s.results, { song, passed }]
     const nextIndex = s.index + 1
     if (reason === 'ended set' || nextIndex >= s.queue.length) {
-      log('karaoke', 'set finished', { songs: results.length })
-      void playerController.pause('karaoke: set finished')
-      setState({ ...s, results, finished: true })
+      log('karaoke', 'set finished', { title: s.title, songs: results.length })
+      void playerController.pause('song set finished')
+      if (s.test) {
+        setState({ ...s, results, finished: true })
+      } else {
+        setState(null)
+        navigate(s.returnTo)
+      }
     } else {
       setState({ ...s, results, index: nextIndex })
     }
@@ -122,15 +146,21 @@ export function useKaraokeSet() {
     return () => window.clearInterval(id)
   }, [currentId, advance])
 
-  /** Starts a set and returns the first song's id (or null if there's nothing learned yet). */
-  const start = useCallback((order: KaraokeOrder): string | null => {
-    const queue = ordered(loadLearnedSongs(), order)
+  /** Starts playing through `queue`; returns the first song's id (or null if it's empty). */
+  const start = useCallback((queue: SetSong[], options: StartOptions): string | null => {
     if (queue.length === 0) return null
     playerController.activate()
-    log('karaoke', 'set started', { order, songs: queue.map((s) => s.id) })
-    setState({ queue, index: 0, passed: {}, results: [], finished: false })
+    log('karaoke', 'set started', { ...options, songs: queue.map((s) => s.id) })
+    setState({ ...options, queue, index: 0, passed: {}, results: [], finished: false })
     return queue[0].id
   }, [])
+
+  /** The karaoke set: every fully learned song, as a test. */
+  const startKaraoke = useCallback(
+    (order: KaraokeOrder): string | null =>
+      start(ordered<LearnedSong>(loadLearnedSongs(), order), { title: 'Karaoke set', test: true, returnTo: { name: 'karaoke' } }),
+    [start],
+  )
 
   const onPass = useCallback((startLine: number) => {
     setState((s) => {
@@ -167,12 +197,16 @@ export function useKaraokeSet() {
 
   return {
     active: state !== null && !state.finished,
+    title: state?.title ?? '',
+    test: state?.test ?? false,
+    returnTo: state?.returnTo ?? ({ name: 'home' } as Route),
     finished: state?.finished ? state.results : null,
     current,
     number: (state?.index ?? 0) + 1,
     total: state?.queue.length ?? 0,
     nextName: state && state.index + 1 < state.queue.length ? state.queue[state.index + 1].name : null,
     start,
+    startKaraoke,
     onPass,
     next: () => advance('skipped'),
     end: () => advance('ended set'),
@@ -181,4 +215,4 @@ export function useKaraokeSet() {
   }
 }
 
-export type KaraokeSet = ReturnType<typeof useKaraokeSet>
+export type SongSet = ReturnType<typeof useSongSet>

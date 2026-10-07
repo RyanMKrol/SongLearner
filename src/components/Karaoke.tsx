@@ -1,7 +1,7 @@
 // The karaoke set page: your learned songs, how to order them, and the results of a set.
 import { useState } from 'react'
 import { formatTime, usePlayer } from '../hooks'
-import type { KaraokeOrder, KaraokeSet } from '../karaoke'
+import type { KaraokeOrder, SongSet } from '../karaoke'
 import { loadLearnedSongs } from '../practice/storage'
 
 /** The karaoke set page: your learned songs, how to order them, and the last set's results. */
@@ -10,7 +10,7 @@ export function KaraokePage({
   onOpenSong,
   onDone,
 }: {
-  set: KaraokeSet
+  set: SongSet
   onOpenSong: (trackId: string) => void
   onDone: () => void
 }) {
@@ -25,7 +25,7 @@ export function KaraokePage({
     return (
       <main className="home">
         <section className="home-hero">
-          <h2>Set finished</h2>
+          <h2>{set.title}: finished</h2>
           <p className="muted">
             {perfect} of {set.finished.length} {set.finished.length === 1 ? 'song' : 'songs'} sung all the way
             through from memory.
@@ -95,7 +95,7 @@ export function KaraokePage({
               className="btn btn-primary"
               disabled={!ready}
               onClick={() => {
-                const first = set.start(order)
+                const first = set.startKaraoke(order)
                 if (first) onOpenSong(first)
               }}
             >

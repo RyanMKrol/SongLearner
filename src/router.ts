@@ -4,21 +4,29 @@
 //   /                home
 //   /song/<trackId>  a song
 //   /karaoke         the karaoke set
+//   /playlist/<id>   one of your playlists
 import { useSyncExternalStore } from 'react'
 import { log } from './log'
 
-export type Route = { name: 'home' } | { name: 'song'; trackId: string } | { name: 'karaoke' }
+export type Route =
+  | { name: 'home' }
+  | { name: 'song'; trackId: string }
+  | { name: 'karaoke' }
+  | { name: 'playlist'; playlistId: string }
 
 export function parseRoute(pathname: string): Route {
   const song = /^\/song\/([^/]+)\/?$/.exec(pathname)
   if (song) return { name: 'song', trackId: decodeURIComponent(song[1]) }
   if (/^\/karaoke\/?$/.test(pathname)) return { name: 'karaoke' }
+  const playlist = /^\/playlist\/([^/]+)\/?$/.exec(pathname)
+  if (playlist) return { name: 'playlist', playlistId: decodeURIComponent(playlist[1]) }
   return { name: 'home' }
 }
 
 export function routePath(route: Route): string {
   if (route.name === 'song') return `/song/${encodeURIComponent(route.trackId)}`
   if (route.name === 'karaoke') return '/karaoke'
+  if (route.name === 'playlist') return `/playlist/${encodeURIComponent(route.playlistId)}`
   return '/'
 }
 

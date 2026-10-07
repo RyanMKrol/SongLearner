@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
 import { KaraokePage } from './components/Karaoke'
-import { useKaraokeSet } from './karaoke'
+import { useSongSet } from './karaoke'
+import { PlaylistPage } from './components/Playlists'
 import { Landing } from './components/Landing'
 import { SongView } from './components/SongView'
 import { TopBar } from './components/TopBar'
@@ -76,7 +77,7 @@ export default function App() {
 function Workspace({ onLogout }: { onLogout: () => void }) {
   const player = usePlayer()
   const route = useRoute()
-  const karaoke = useKaraokeSet()
+  const karaoke = useSongSet()
   const [notPremium, setNotPremium] = useState(false)
 
   useEffect(() => {
@@ -159,10 +160,13 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           set={karaoke}
           onOpenSong={openSong}
           onDone={() => {
+            const back = karaoke.returnTo
             karaoke.close()
-            navigate({ name: 'karaoke' })
+            navigate(back)
           }}
         />
+      ) : route.name === 'playlist' ? (
+        <PlaylistPage playlistId={route.playlistId} set={karaoke} />
       ) : route.name === 'song' ? (
         songTrack ? (
           <SongView
@@ -171,6 +175,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             karaoke={
               karaoke.active && karaoke.current?.id === songTrack.id
                 ? {
+                    title: karaoke.title,
+                    test: karaoke.test,
                     number: karaoke.number,
                     total: karaoke.total,
                     nextName: karaoke.nextName,

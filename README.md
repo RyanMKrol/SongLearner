@@ -39,6 +39,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   learned. Songs play back to back with the words blurred; sections you sing through without
   pausing, skipping or peeking count, and each song's score is saved. Songs with slips can be sent
   back to learning in one click.
+- **Playlists**: the + on a song card adds it to a playlist (or starts a new one). Each playlist
+  has its own page where you can reorder songs, then play through them with the lyrics showing,
+  or test yourself on them with the words hidden and a score at the end.
 - **Test mode** (`T`) blurs the words. A section you sing from start to end without pausing,
   skipping or peeking is marked learned and folds away, so you can see what's left and start
   from the first section you don't know yet.
@@ -132,6 +135,7 @@ The dev server keeps everything in plain JSON files under `data/` (not committed
 
 - `data/library.json`: the songs on your home page
 - `data/settings.json`: app settings
+- `data/playlists.json`: your playlists
 - `data/songs/<trackId>.json`: one file per song, with its lyrics (including lines you've added)
   and your progress, sections and reading fixes
 - `data/backups/`: before a file is overwritten or deleted, a timestamped copy is kept here (at

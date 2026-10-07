@@ -5,6 +5,7 @@
 // Layout:
 //   data/library.json          songs you've opened, newest first
 //   data/settings.json         app settings (volume, practice options, romaji mode...)
+//   data/playlists.json        your playlists
 //   data/songs/<trackId>.json  per song: { trackId, name, artists, lyrics, prefs }
 //   data/other.json            anything else
 //   data/backups/...           a timestamped copy of a file before it's overwritten (at most hourly)
@@ -55,6 +56,8 @@ function load(): Map<string, Json> {
   mkdirSync(SONGS_DIR, { recursive: true })
   const library = readJson(join(DATA_DIR, 'library.json'))
   if (library !== undefined) store.set('library', library)
+  const playlists = readJson(join(DATA_DIR, 'playlists.json'))
+  if (playlists !== undefined) store.set('playlists', playlists)
   const settings = readJson(join(DATA_DIR, 'settings.json')) as Record<string, Json> | undefined
   for (const [k, v] of Object.entries(settings ?? {})) store.set(`setting:${k}`, v)
   const other = readJson(join(DATA_DIR, 'other.json')) as Record<string, Json> | undefined
@@ -72,6 +75,7 @@ function load(): Map<string, Json> {
 /** Which file a key lives in. */
 function fileFor(key: string): string {
   if (key === 'library') return join(DATA_DIR, 'library.json')
+  if (key === 'playlists') return join(DATA_DIR, 'playlists.json')
   if (key.startsWith('setting:')) return join(DATA_DIR, 'settings.json')
   const song = /^(prefs|lyrics):(.+)$/.exec(key)
   if (song) return join(SONGS_DIR, `${safeName(song[2])}.json`)
@@ -81,6 +85,7 @@ function fileFor(key: string): string {
 /** The full contents of one file, built from the in-memory store. */
 function contentsOf(path: string, data: Map<string, Json>): Json | undefined {
   if (path === join(DATA_DIR, 'library.json')) return data.get('library')
+  if (path === join(DATA_DIR, 'playlists.json')) return data.get('playlists')
   if (path === join(DATA_DIR, 'settings.json')) {
     const out: Record<string, Json> = {}
     for (const [k, v] of data) if (k.startsWith('setting:')) out[k.slice('setting:'.length)] = v

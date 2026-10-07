@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlayer } from '../hooks'
 import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
+import { PlaylistMenu, PlaylistsSection } from './Playlists'
 import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
 import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
@@ -104,6 +105,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
                         </span>
                       ))}
                   </button>
+                  <PlaylistMenu trackId={entry.id} songName={entry.name} />
                   <button
                     className="library-remove"
                     title="Delete this song and everything saved for it"
@@ -122,6 +124,8 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           </div>
         </section>
       )}
+
+      <PlaylistsSection />
 
       <section className="tips">
         <h3 className="section-title">How to practise</h3>

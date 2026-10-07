@@ -43,8 +43,12 @@ const resetLineKeyedPrefs = (p: TrackPrefs): TrackPrefs => ({
   hide: {},
 })
 
-/** A song being sung as part of a karaoke set (see Karaoke.tsx). */
+/** A song being played as part of a set: a playlist or the karaoke set (see karaoke.ts). */
 export interface KaraokeSetInfo {
+  /** e.g. "Karaoke set" or the playlist's name. */
+  title: string
+  /** Test run: the words start hidden and sections sung through count. */
+  test: boolean
   /** 1-based place in the set. */
   number: number
   total: number
@@ -69,8 +73,8 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   // doesn't drop you out of a test halfway through.
   const testModeKey = `songlearner:test-mode:${track.id}`
   const [testMode, setTestMode] = useState(() => {
-    // A karaoke set is about singing from memory, so the words start hidden.
-    if (karaoke) return true
+    // A test run is about singing from memory, so the words start hidden.
+    if (karaoke?.test) return true
     try {
       return sessionStorage.getItem(testModeKey) === '1'
     } catch {
@@ -708,7 +712,8 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               <div className="karaoke-banner">
                 <div>
                   <strong>
-                    Karaoke set · song {karaoke.number} of {karaoke.total}
+                    {karaoke.title} · song {karaoke.number} of {karaoke.total}
+                    {karaoke.test ? ' · test' : ''}
                   </strong>
                   <div className="muted small">
                     {karaoke.nextName ? `Next up: ${karaoke.nextName}. It starts when this song ends.` : 'Last song of the set.'}
