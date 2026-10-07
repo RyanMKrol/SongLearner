@@ -468,6 +468,49 @@ kbd {
   color: var(--warn);
 }
 
+.karaoke-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 20px 0;
+}
+
+.karaoke-result {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.karaoke-result img,
+.karaoke-result .art-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.karaoke-result-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.karaoke-score {
+  font-weight: 700;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.karaoke-score.is-perfect {
+  color: var(--good);
+}
+
 .tips ol {
   margin: 0 0 12px;
   padding-left: 20px;
@@ -1008,6 +1051,18 @@ button.romaji-word.is-fixed {
 
 .lyrics.is-test .section-header .btn {
   opacity: 1;
+}
+
+.karaoke-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 24px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(255, 79, 139, 0.18), rgba(139, 123, 255, 0.18));
+  border: 1px solid rgba(255, 79, 139, 0.5);
 }
 
 .test-banner {

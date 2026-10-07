@@ -3,13 +3,14 @@ import { usePlayer } from '../hooks'
 import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
 import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
-import { deleteSong, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
+import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
 
-export function Home({ onOpenSong }: { onOpenSong: () => void }) {
+export function Home({ onOpenSong, onKaraoke }: { onOpenSong: () => void; onKaraoke: () => void }) {
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [learnedCount] = useState(() => loadLearnedSongs().length)
   const ready = player.status === 'ready' && player.deviceId
 
   const open = async (entry: LibraryEntry) => {
@@ -61,6 +62,11 @@ export function Home({ onOpenSong }: { onOpenSong: () => void }) {
           <button className="btn btn-primary" disabled={!ready} onClick={() => void bringHere()}>
             Use what&apos;s playing on Spotify
           </button>
+          {learnedCount > 0 && (
+            <button className="btn" onClick={onKaraoke}>
+              🎤 Karaoke set ({learnedCount} learned {learnedCount === 1 ? 'song' : 'songs'})
+            </button>
+          )}
           {player.track && (
             <button className="btn" onClick={onOpenSong}>
               Back to {player.track.name}
@@ -90,11 +96,14 @@ export function Home({ onOpenSong }: { onOpenSong: () => void }) {
                     {entry.imageUrl ? <img src={entry.imageUrl} alt="" /> : <span className="art-placeholder" />}
                     <span className="library-name">{entry.name}</span>
                     <span className="muted small">{entry.artists.join(', ')}</span>
-                    {summary && (
-                      <span className="library-progress small">
-                        {summary.known} {summary.known === 1 ? 'section' : 'sections'} known
-                      </span>
-                    )}
+                    {summary &&
+                      (summary.complete ? (
+                        <span className="library-progress small">✓ Learned · in your karaoke set</span>
+                      ) : (
+                        <span className="library-progress small">
+                          {summary.known} of {summary.total} sections learned
+                        </span>
+                      ))}
                   </button>
                   <button
                     className="library-remove"

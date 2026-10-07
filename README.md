@@ -34,6 +34,11 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - When a Japanese song is opened for the first time, Claude checks how it's sung (it can look the
   song up on lyric sites that show readings) and applies the changes it's confident about. You
   can switch each one off. This needs an Anthropic API key (see Setup) and runs once per song.
+- **Karaoke set**: an automatic playlist (inside the app, not on Spotify) of every song you've
+  fully learned. A song joins once all its sections are learned and leaves if one is marked not
+  learned. Songs play back to back with the words blurred; sections you sing through without
+  pausing, skipping or peeking count, and each song's score is saved. Songs with slips can be sent
+  back to learning in one click.
 - **Test mode** (`T`) blurs the words. A section you sing from start to end without pausing,
   skipping or peeking is marked learned and folds away, so you can see what's left and start
   from the first section you don't know yet.

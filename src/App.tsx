@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Home } from './components/Home'
+import { KaraokePage } from './components/Karaoke'
+import { useKaraokeSet } from './karaoke'
 import { Landing } from './components/Landing'
 import { SongView } from './components/SongView'
 import { TopBar } from './components/TopBar'
@@ -70,7 +72,8 @@ export default function App() {
 
 function Workspace({ onLogout }: { onLogout: () => void }) {
   const player = usePlayer()
-  const [view, setView] = useState<'home' | 'song'>('home')
+  const [view, setView] = useState<'home' | 'song' | 'karaoke'>('home')
+  const karaoke = useKaraokeSet()
   const [notPremium, setNotPremium] = useState(false)
 
   useEffect(() => {
@@ -95,7 +98,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="app">
-      <TopBar onHome={() => setView('home')} onLogout={onLogout} onPicked={() => setView('song')} />
+      <TopBar
+        onHome={() => setView('home')}
+        onKaraoke={() => setView('karaoke')}
+        onLogout={onLogout}
+        onPicked={() => setView('song')}
+      />
       {notPremium && (
         <div className="banner banner-error">
           This Spotify account isn&apos;t on Premium. The in-browser player needs full Premium.
@@ -103,10 +111,34 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       )}
       {player.status === 'error' && <div className="banner banner-error">{player.error}</div>}
       {player.status !== 'error' && player.error && <div className="banner">{player.error}</div>}
-      {view === 'song' && player.track ? (
-        <SongView key={player.track.id} track={player.track} />
+      {view === 'karaoke' || karaoke.finished ? (
+        <KaraokePage
+          set={karaoke}
+          onOpenSong={() => setView('song')}
+          onDone={() => {
+            karaoke.close()
+            setView('karaoke')
+          }}
+        />
+      ) : view === 'song' && player.track ? (
+        <SongView
+          key={player.track.id}
+          track={player.track}
+          karaoke={
+            karaoke.active && karaoke.current?.id === player.track.id
+              ? {
+                  number: karaoke.number,
+                  total: karaoke.total,
+                  nextName: karaoke.nextName,
+                  onPass: karaoke.onPass,
+                  onNext: karaoke.next,
+                  onEnd: karaoke.end,
+                }
+              : null
+          }
+        />
       ) : (
-        <Home onOpenSong={() => setView('song')} />
+        <Home onOpenSong={() => setView('song')} onKaraoke={() => setView('karaoke')} />
       )}
     </div>
   )

@@ -42,7 +42,19 @@ const resetLineKeyedPrefs = (p: TrackPrefs): TrackPrefs => ({
   hide: {},
 })
 
-export function SongView({ track }: { track: PlayerTrack }) {
+/** A song being sung as part of a karaoke set (see Karaoke.tsx). */
+export interface KaraokeSetInfo {
+  /** 1-based place in the set. */
+  number: number
+  total: number
+  nextName: string | null
+  /** A section was sung through without help. */
+  onPass: (startLine: number) => void
+  onNext: () => void
+  onEnd: () => void
+}
+
+export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaoke?: KaraokeSetInfo | null }) {
   const player = usePlayer()
   const { state: lyricsState, replace, refetch } = useLyrics(track)
   const [prefs, updatePrefs] = useTrackPrefs(track.id)
@@ -56,6 +68,8 @@ export function SongView({ track }: { track: PlayerTrack }) {
   // doesn't drop you out of a test halfway through.
   const testModeKey = `songlearner:test-mode:${track.id}`
   const [testMode, setTestMode] = useState(() => {
+    // A karaoke set is about singing from memory, so the words start hidden.
+    if (karaoke) return true
     try {
       return sessionStorage.getItem(testModeKey) === '1'
     } catch {
@@ -327,12 +341,15 @@ export function SongView({ track }: { track: PlayerTrack }) {
     },
     [sections, updatePrefs],
   )
+  const karaokePass = karaoke?.onPass
   const onSectionPassed = useCallback(
     (sectionIndex: number) => {
       markLearned(sectionIndex, true)
       setJustPassed(sectionIndex)
+      const section = sections[sectionIndex]
+      if (section) karaokePass?.(section.startLine)
     },
-    [markLearned],
+    [markLearned, sections, karaokePass],
   )
   useEffect(() => {
     if (justPassed === null) return
@@ -342,6 +359,27 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const testAttempt = useTestMode(testMode && synced, songTimings, peek, onSectionPassed)
 
   const learnedCount = sections.filter((s) => prefs.mastery[s.startLine] === 3).length
+
+  // Keep the song's progress up to date for the library and the karaoke set. A song is learned
+  // when every section is; it joins the karaoke set then, and leaves it if one is unlearned.
+  useEffect(() => {
+    if (!synced || sections.length === 0) return
+    const current = prefs.progress
+    const complete = learnedCount === sections.length
+    if (current?.sections === sections.length && current.learned === learnedCount && Boolean(current.completedAt) === complete) {
+      return
+    }
+    if (complete && !current?.completedAt) log('song-view', 'song learned (added to the karaoke set)', { trackId: track.id })
+    if (!complete && current?.completedAt) log('song-view', 'song no longer fully learned (left the karaoke set)', { trackId: track.id })
+    updatePrefs((p) => ({
+      ...p,
+      progress: {
+        sections: sections.length,
+        learned: learnedCount,
+        completedAt: complete ? (p.progress?.completedAt ?? Date.now()) : undefined,
+      },
+    }))
+  }, [synced, sections.length, learnedCount, prefs.progress, track.id, updatePrefs])
 
   const startSection = useCallback(
     (sectionIndex: number) => {
@@ -657,6 +695,26 @@ export function SongView({ track }: { track: PlayerTrack }) {
         )}
         {lyrics && lines.length > 0 && (
           <>
+            {karaoke && (
+              <div className="karaoke-banner">
+                <div>
+                  <strong>
+                    Karaoke set · song {karaoke.number} of {karaoke.total}
+                  </strong>
+                  <div className="muted small">
+                    {karaoke.nextName ? `Next up: ${karaoke.nextName}. It starts when this song ends.` : 'Last song of the set.'}
+                  </div>
+                </div>
+                <div className="test-banner-actions">
+                  <button className="btn btn-small" onClick={karaoke.onNext}>
+                    {karaoke.nextName ? 'Next song' : 'Finish'}
+                  </button>
+                  <button className="btn btn-small btn-ghost" onClick={karaoke.onEnd}>
+                    End set
+                  </button>
+                </div>
+              </div>
+            )}
             {testMode && synced && (
               <div className="test-banner">
                 <div>

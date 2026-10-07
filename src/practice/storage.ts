@@ -19,6 +19,24 @@ export interface TrackPrefs {
   readings?: Record<string, string>
   /** Claude's check of how a Japanese song is sung. */
   aiReview?: AiReview
+  /** Section counts, kept up to date by the song screen so lists can show progress. */
+  progress?: SongProgress
+  /** Results of karaoke sets this song was part of, oldest first. */
+  rehearsals?: Rehearsal[]
+}
+
+export interface SongProgress {
+  sections: number
+  learned: number
+  /** When every section was first learned; cleared if one is marked not learned again. */
+  completedAt?: number
+}
+
+export interface Rehearsal {
+  at: number
+  /** Sections sung through without help in this run. */
+  passed: number
+  total: number
 }
 
 export interface AiReview {
@@ -281,8 +299,10 @@ export function useTrackPrefs(trackId: string) {
 
   const update = useCallback(
     (change: (prev: TrackPrefs) => TrackPrefs) => {
-      setState((prev) => {
-        const base = prev.trackId === trackId ? prev.prefs : loadPrefs(trackId)
+      setState(() => {
+        // Always start from what's saved: other parts of the app (like a karaoke set recording
+        // its result) can change a song's prefs too, and their changes mustn't be overwritten.
+        const base = loadPrefs(trackId)
         const next = change(base)
         const changed = changedKeys(base, next)
         if (changed.length > 0) {
@@ -341,13 +361,43 @@ export function deleteSong(trackId: string): void {
   }
 }
 
-/** Fraction of sections marked as known, for the library overview. */
-export function masterySummary(trackId: string): { known: number; total: number } | null {
+/** Progress for the library overview. */
+export function masterySummary(trackId: string): { known: number; total: number; complete: boolean } | null {
   const prefs = read<TrackPrefs>(`prefs:${trackId}`)
-  if (!prefs) return null
-  const values = Object.values(prefs.mastery ?? {})
+  if (prefs?.progress && prefs.progress.sections > 0) {
+    const { learned, sections, completedAt } = prefs.progress
+    return { known: learned, total: sections, complete: completedAt !== undefined }
+  }
+  // Songs not opened since progress was recorded: count the rated sections.
+  const values = Object.values(prefs?.mastery ?? {})
   if (values.length === 0) return null
-  return { known: values.filter((v) => v === 3).length, total: values.length }
+  return { known: values.filter((v) => v === 3).length, total: values.length, complete: false }
+}
+
+export interface LearnedSong extends LibraryEntry {
+  completedAt: number
+  sections: number
+  rehearsals: Rehearsal[]
+}
+
+/** Songs with every section learned: the karaoke set. Most recently learned first. */
+export function loadLearnedSongs(): LearnedSong[] {
+  return loadLibrary()
+    .flatMap((entry) => {
+      const prefs = read<TrackPrefs>(`prefs:${entry.id}`)
+      const progress = prefs?.progress
+      if (!progress?.completedAt || progress.sections === 0 || progress.learned < progress.sections) return []
+      return [{ ...entry, completedAt: progress.completedAt, sections: progress.sections, rehearsals: prefs?.rehearsals ?? [] }]
+    })
+    .sort((a, b) => b.completedAt - a.completedAt)
+}
+
+/** Changes one song's prefs from outside its song screen. */
+export function updatePrefs(trackId: string, change: (prev: TrackPrefs) => TrackPrefs): void {
+  const before = loadPrefs(trackId)
+  const next = change(before)
+  log('prefs', 'changed', { trackId, changed: changedKeys(before, next) })
+  savePrefs(trackId, next)
 }
 
 export function useLocalSetting<T>(key: string, initial: T) {

@@ -7,17 +7,21 @@ import { playerController } from '../spotify/player'
 
 interface Props {
   onHome: () => void
+  onKaraoke: () => void
   onLogout: () => void
   onPicked: () => void
 }
 
-export function TopBar({ onHome, onLogout, onPicked }: Props) {
+export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} title="Your songs">
         Song<span className="accent">Learner</span>
       </button>
       <SearchBox onPicked={onPicked} />
+      <button className="btn btn-ghost" onClick={onKaraoke} title="Sing your learned songs from memory">
+        🎤 Karaoke set
+      </button>
       <SaveStatus />
       <button className="btn btn-ghost" onClick={onLogout}>
         Log out
