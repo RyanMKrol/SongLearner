@@ -6,6 +6,7 @@ import {
   useLyrics,
   usePlayer,
   usePractice,
+  useTestMode,
   useRomaji,
   type RomajiMode,
 } from '../hooks'
@@ -48,6 +49,8 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const [editSplits, setEditSplits] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
   const peek = useKeyHeld('h')
+  const [testMode, setTestMode] = useState(false)
+  const [justPassed, setJustPassed] = useState<number | null>(null)
   const [romajiMode, setRomajiMode] = useLocalSetting<RomajiMode>('romaji', 'below')
   const [fixReadings, setFixReadings] = useState(false)
   const [fixingWord, setFixingWord] = useState<RomajiWord | null>(null)
@@ -95,6 +98,41 @@ export function SongView({ track }: { track: PlayerTrack }) {
     () => timings.map((t) => (t ? { startMs: t.startMs - offset, endMs: t.endMs - offset } : { startMs: 0, endMs: 0 })),
     [timings, offset],
   )
+
+  // Test mode: blurred lyrics; sections sung through without help get marked as learned.
+  const markLearned = useCallback(
+    (sectionIndex: number, learned: boolean) => {
+      const section = sections[sectionIndex]
+      if (!section) return
+      updatePrefs((p) => ({ ...p, mastery: { ...p.mastery, [section.startLine]: learned ? 3 : 1 } }))
+    },
+    [sections, updatePrefs],
+  )
+  const onSectionPassed = useCallback(
+    (sectionIndex: number) => {
+      markLearned(sectionIndex, true)
+      setJustPassed(sectionIndex)
+    },
+    [markLearned],
+  )
+  useEffect(() => {
+    if (justPassed === null) return
+    const id = window.setTimeout(() => setJustPassed(null), 2500)
+    return () => window.clearTimeout(id)
+  }, [justPassed])
+  const testAttempt = useTestMode(testMode && synced, songTimings, peek, onSectionPassed)
+  const learnedCount = sections.filter((s) => prefs.mastery[s.startLine] === 3).length
+
+  const startSection = useCallback(
+    (sectionIndex: number) => {
+      const t = songTimings[sectionIndex]
+      if (!t) return
+      playerController.activate()
+      void playerController.seek(t.startMs - settings.leadInMs).then(() => playerController.resume())
+    },
+    [songTimings, settings.leadInMs],
+  )
+  const firstUnlearned = sections.findIndex((s) => prefs.mastery[s.startLine] !== 3)
 
   const currentLine = useDerivedFromPosition(
     useCallback((pos: number) => (synced ? lineIndexAt(lines, pos + offset) : -1), [synced, lines, offset]),
@@ -252,6 +290,10 @@ export function SongView({ track }: { track: PlayerTrack }) {
           else if (practice.status) stopPractice()
           else if (editSplits) setEditSplits(false)
           break
+        case 't':
+        case 'T':
+          if (synced) setTestMode((v) => !v)
+          break
         case 'f':
         case 'F':
           if (synced && lines.length > 0) setOverlay((o) => (o === 'performance' ? null : 'performance'))
@@ -321,6 +363,29 @@ export function SongView({ track }: { track: PlayerTrack }) {
         )}
         {lyrics && lines.length > 0 && (
           <>
+            {testMode && synced && (
+              <div className="test-banner">
+                <div>
+                  <strong>Test mode</strong> · {learnedCount} of {sections.length} sections learned
+                  <div className="muted small">
+                    Sing without the words. A section is marked learned when it plays from start to end
+                    without pausing, skipping or peeking (hold H to peek).
+                  </div>
+                </div>
+                <div className="test-banner-actions">
+                  {firstUnlearned >= 0 ? (
+                    <button className="btn btn-primary btn-small" onClick={() => startSection(firstUnlearned)}>
+                      Start from first unlearned
+                    </button>
+                  ) : (
+                    <span className="learned-tag">✓ Whole song learned</span>
+                  )}
+                  <button className="btn btn-small" onClick={() => setTestMode(false)}>
+                    Exit test (T)
+                  </button>
+                </div>
+              </div>
+            )}
             {!synced && (
               <div className="banner banner-inline">
                 These lyrics aren&apos;t timed, so they won&apos;t scroll by themselves.{' '}
@@ -353,6 +418,11 @@ export function SongView({ track }: { track: PlayerTrack }) {
               onLineClick={seekToLine}
               onSectionClick={selectSection}
               onSectionLoop={(i) => loop(i, i)}
+              test={
+                testMode && synced
+                  ? { attempt: testAttempt, justPassed, onStartSection: startSection, onSetLearned: markLearned }
+                  : null
+              }
             />
           </>
         )}
@@ -369,6 +439,15 @@ export function SongView({ track }: { track: PlayerTrack }) {
         </div>
 
         <Transport durationMs={track.durationMs} practiceRange={practiceRange} />
+
+        {synced && sections.length > 0 && (
+          <button
+            className={`btn test-toggle ${testMode ? 'is-active' : 'btn-primary'}`}
+            onClick={() => setTestMode((v) => !v)}
+          >
+            {testMode ? 'Exit test mode (T)' : `Test yourself (T) · ${learnedCount}/${sections.length} learned`}
+          </button>
+        )}
 
         {synced && <TimingControl offsetMs={offset} onChange={setOffset} />}
 

@@ -3,6 +3,7 @@ import type { LyricLine } from './lyrics/lrc'
 import { findLyrics } from './lyrics/lrclib'
 import { hasJapanese, romanizeLines, type ReadingFixes, type RomajiLine } from './lyrics/romaji'
 import { LoopController, type LoopOptions, type LoopStatus, type PracticeStep } from './playback/loop'
+import { TestTracker, type TestSpan } from './playback/testTracker'
 import { loadSavedLyrics, saveLyrics, type SavedLyrics } from './practice/storage'
 import { playerController, type PlayerTrack } from './spotify/player'
 
@@ -235,6 +236,49 @@ export function usePractice() {
   const dismissFinished = useCallback(() => setState((s) => ({ ...s, finished: null })), [])
 
   return { ...state, start, stop, dismissFinished }
+}
+
+/**
+ * Test mode: watches playback and calls `onPassed` for each section sung from start to end
+ * without pausing, skipping or peeking. Returns the section currently being attempted.
+ */
+export function useTestMode(
+  enabled: boolean,
+  spans: TestSpan[],
+  peek: boolean,
+  onPassed: (sectionIndex: number) => void,
+): number | null {
+  const trackerRef = useRef<TestTracker | null>(null)
+  const onPassedRef = useRef(onPassed)
+  const [attempt, setAttempt] = useState<number | null>(null)
+
+  useEffect(() => {
+    onPassedRef.current = onPassed
+  }, [onPassed])
+
+  useEffect(() => {
+    if (!enabled) {
+      trackerRef.current = null
+      return
+    }
+    const tracker = new TestTracker(spans)
+    trackerRef.current = tracker
+    const id = window.setInterval(() => {
+      const clock = playerController.clock
+      for (const event of tracker.tick(clock.position(), clock.isPlaying, performance.now())) {
+        if (event.type === 'passed') onPassedRef.current(event.section)
+      }
+      setAttempt(tracker.current)
+    }, 50)
+    return () => window.clearInterval(id)
+  }, [enabled, spans])
+
+  // Looking at the words means this attempt doesn't count.
+  useEffect(() => {
+    if (peek) trackerRef.current?.interrupt()
+  }, [peek])
+
+  return enabled ? attempt : null
 }
 
 /** True while the given key is held down (ignoring typing in form fields). */

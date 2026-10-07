@@ -29,6 +29,17 @@ interface Props {
   onLineClick: (lineIndex: number) => void
   onSectionClick: (sectionIndex: number, extend: boolean) => void
   onSectionLoop: (sectionIndex: number) => void
+  /** Test mode: words are blurred and learned sections fold away. */
+  test: TestModeProps | null
+}
+
+export interface TestModeProps {
+  /** Section being sung right now that will count if it gets to the end. */
+  attempt: number | null
+  /** Section that was just passed, for a moment of celebration. */
+  justPassed: number | null
+  onStartSection: (sectionIndex: number) => void
+  onSetLearned: (sectionIndex: number, learned: boolean) => void
 }
 
 const FOLLOW_PAUSE_MS = 4000
@@ -61,6 +72,14 @@ export function LyricsPane(props: Props) {
   }
 
   const sectionByStart = new Map(sections.map((s) => [s.startLine, s]))
+  const test = props.test
+  /** In test mode, learned sections show only their header. */
+  const collapsedSection = (lineIndex: number): Section | null => {
+    if (!test) return null
+    let found: Section | null = null
+    for (const s of sections) if (s.startLine <= lineIndex) found = s
+    return found && lineIndex <= found.endLine && props.mastery(found) === 3 ? found : null
+  }
   const nextSung = (() => {
     for (let i = currentLine + 1; i < lines.length; i++) if (isSung(lines[i])) return i
     return -1
@@ -69,7 +88,13 @@ export function LyricsPane(props: Props) {
   return (
     <div className="lyrics-wrap">
       <div
-        className={`lyrics ${synced ? 'is-synced' : 'is-plain'} ${editSplits ? 'is-editing' : ''}`}
+        className={[
+          'lyrics',
+          synced ? 'is-synced' : 'is-plain',
+          editSplits ? 'is-editing' : '',
+          test ? 'is-test' : '',
+          test && props.peek ? 'is-peeking' : '',
+        ].join(' ')}
         ref={containerRef}
         onWheel={markUserScroll}
         onTouchMove={markUserScroll}
@@ -90,22 +115,27 @@ export function LyricsPane(props: Props) {
             .filter(Boolean)
             .join(' ')
 
+          const header = section && (
+            <SectionHeader
+              section={section}
+              synced={synced}
+              selected={selection !== null && section.index >= selection.from && section.index <= selection.to}
+              mastery={props.mastery(section)}
+              onClick={(extend) => props.onSectionClick(section.index, extend)}
+              onLoop={() => props.onSectionLoop(section.index)}
+              test={test}
+              collapsed={collapsedSection(i) !== null}
+              onHeaderElement={(el) => {
+                // Folded sections scroll to their header, since their lines aren't drawn.
+                if (collapsedSection(i)) for (let j = section.startLine; j <= section.endLine; j++) lineRefs.current[j] = el
+              }}
+            />
+          )
+          if (collapsedSection(i)) return <div key={i}>{header}</div>
+
           return (
             <div key={i}>
-              {section && (
-                <SectionHeader
-                  section={section}
-                  synced={synced}
-                  selected={
-                    selection !== null &&
-                    section.index >= selection.from &&
-                    section.index <= selection.to
-                  }
-                  mastery={props.mastery(section)}
-                  onClick={(extend) => props.onSectionClick(section.index, extend)}
-                  onLoop={() => props.onSectionLoop(section.index)}
-                />
-              )}
+              {header}
               <div
                 ref={(el) => {
                   lineRefs.current[i] = el
@@ -171,27 +201,71 @@ function SectionHeader(props: {
   mastery: Mastery
   onClick: (extend: boolean) => void
   onLoop: () => void
+  test: TestModeProps | null
+  collapsed: boolean
+  onHeaderElement: (el: HTMLDivElement | null) => void
 }) {
-  const { section } = props
+  const { section, test, onHeaderElement } = props
+  const learned = props.mastery === 3
+  const testing = test?.attempt === section.index
+  const passed = test?.justPassed === section.index
+  const classes = [
+    'section-header',
+    props.selected ? 'is-selected' : '',
+    props.collapsed ? 'is-collapsed' : '',
+    testing ? 'is-testing' : '',
+    passed ? 'is-passed' : '',
+  ].join(' ')
+
   return (
     <div
-      className={`section-header ${props.selected ? 'is-selected' : ''}`}
+      ref={onHeaderElement}
+      className={classes}
       onClick={(e) => props.onClick(e.shiftKey)}
       title="Click to select, shift-click to select a run of sections"
     >
       {section.repeatGroup && <span className={`badge badge-${section.repeatGroup}`}>{section.repeatGroup}</span>}
       <span className="section-header-name">{section.name}</span>
-      <span className={`mastery-dot mastery-${props.mastery}`} title={MASTERY_LABELS[props.mastery]} />
-      {props.synced && (
-        <button
-          className="btn btn-small"
-          onClick={(e) => {
-            e.stopPropagation()
-            props.onLoop()
-          }}
-        >
-          Loop
-        </button>
+      {test ? (
+        <>
+          {learned && <span className="learned-tag">✓ Learned</span>}
+          {testing && <span className="testing-tag">Singing… keep going</span>}
+          <span className="section-header-actions">
+            <button
+              className="btn btn-small"
+              onClick={(e) => {
+                e.stopPropagation()
+                test.onStartSection(section.index)
+              }}
+            >
+              Start here
+            </button>
+            <button
+              className="btn btn-small btn-ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                test.onSetLearned(section.index, !learned)
+              }}
+            >
+              {learned ? 'Not learned yet' : 'Mark learned'}
+            </button>
+          </span>
+        </>
+      ) : (
+        <>
+          <span className={`mastery-dot mastery-${props.mastery}`} title={MASTERY_LABELS[props.mastery]} />
+          {props.synced && (
+            <button
+              className="btn btn-small"
+              onClick={(e) => {
+                e.stopPropagation()
+                props.onLoop()
+              }}
+            >
+              Loop
+            </button>
+          )}
+        </>
       )}
     </div>
   )
