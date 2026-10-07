@@ -16,6 +16,24 @@ export interface TrackPrefs {
   hide: Record<number, HideLevel>
   /** Romaji corrections for this song: original word → how it's sung. */
   readings?: Record<string, string>
+  /** Claude's check of how a Japanese song is sung. */
+  aiReview?: AiReview
+}
+
+export interface AiReview {
+  /** Fingerprint of the lyrics that were checked. */
+  lyricsKey: string
+  reviewedAt: number
+  model: string
+  notes: string
+  suggestions: {
+    source: string
+    reading: string
+    confidence: 'high' | 'medium' | 'low'
+    reason: string
+    /** Whether the suggestion is used in the romaji. Low-confidence ones start off. */
+    applied: boolean
+  }[]
 }
 
 export interface SavedLyrics {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   isTyping,
   useDerivedFromPosition,
@@ -12,7 +12,8 @@ import {
 } from '../hooks'
 import { lineIndexAt, parseLyrics } from '../lyrics/lrc'
 import type { LrclibRecord } from '../lyrics/lrclib'
-import type { RomajiWord } from '../lyrics/romaji'
+import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
+import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
 import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, type Section } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
@@ -77,8 +78,69 @@ export function SongView({ track }: { track: PlayerTrack }) {
     () => buildSections(lines, prefs.sectionStarts ?? autoSectionStarts(lines), prefs.sectionNames),
     [lines, prefs.sectionStarts, prefs.sectionNames],
   )
-  const readingFixes = prefs.readings ?? NO_FIXES
+  // Claude's check of how a Japanese song is sung. Its fixes apply first; your own fixes win.
+  const currentLyricsKey = saved ? lyricsKey(saved.text) : null
+  const review = prefs.aiReview && prefs.aiReview.lyricsKey === currentLyricsKey ? prefs.aiReview : null
+  const readingFixes = useMemo(() => {
+    const fromReview = review?.suggestions.filter((s) => s.applied).map((s) => [s.source, s.reading]) ?? []
+    if (fromReview.length === 0) return prefs.readings ?? NO_FIXES
+    return { ...Object.fromEntries(fromReview), ...prefs.readings }
+  }, [review, prefs.readings])
   const romaji = useRomaji(lines, readingFixes)
+
+  const [reviewError, setReviewError] = useState<{ key: string; kind: string; message: string } | null>(null)
+  const reviewInFlight = useRef<string | null>(null)
+  const runReview = useCallback(
+    (key: string, words: { source: string; standard: string }[]) => {
+      if (reviewInFlight.current === key) return
+      reviewInFlight.current = key
+      requestReadingReview({
+        title: track.name,
+        artist: track.artists.join(', '),
+        album: track.album,
+        lines: lines.filter((l) => hasJapanese(l.text)).map((l) => l.text),
+        words,
+      })
+        .then((result) => {
+          updatePrefs((p) => ({
+            ...p,
+            aiReview: {
+              lyricsKey: key,
+              reviewedAt: Date.now(),
+              model: result.model,
+              notes: result.notes,
+              suggestions: result.suggestions.map((s) => ({ ...s, applied: s.confidence !== 'low' })),
+            },
+          }))
+        })
+        .catch((e: unknown) => {
+          const kind = e instanceof ReviewError ? e.kind : 'failed'
+          setReviewError({ key, kind, message: e instanceof Error ? e.message : String(e) })
+        })
+        .finally(() => {
+          if (reviewInFlight.current === key) reviewInFlight.current = null
+        })
+    },
+    [track.name, track.artists, track.album, lines, updatePrefs],
+  )
+  /** Every distinct Japanese word with its dictionary romaji, for the review. */
+  const reviewWords = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const line of romaji.lines ?? []) {
+      for (const w of line?.words ?? []) {
+        if (w.kind === 'word' && hasJapanese(w.source) && !seen.has(w.source)) seen.set(w.source, w.standard)
+      }
+    }
+    return [...seen].map(([source, standard]) => ({ source, standard }))
+  }, [romaji.lines])
+  const reviewFailed = reviewError !== null && reviewError.key === currentLyricsKey
+  const reviewPending = romaji.available && currentLyricsKey !== null && review === null && !reviewFailed
+  // Japanese songs only: check once the romaji is ready, then keep the result with the song.
+  useEffect(() => {
+    if (reviewPending && currentLyricsKey && romaji.lines && reviewWords.length > 0) {
+      runReview(currentLyricsKey, reviewWords)
+    }
+  }, [reviewPending, currentLyricsKey, romaji.lines, reviewWords, runReview])
   const romajiLines = romajiMode === 'off' ? null : romaji.lines
   /** Sections as shown: unnamed sections take their label from the romaji when there is some. */
   const displaySections = useMemo(
@@ -547,9 +609,9 @@ export function SongView({ track }: { track: PlayerTrack }) {
                       ? 'Click any romaji word in the lyrics to change it.'
                       : 'Dotted words are often sung differently in songs.'}
                   </span>
-                  {Object.keys(readingFixes).length > 0 && (
+                  {Object.keys(prefs.readings ?? {}).length > 0 && (
                     <div className="fix-list">
-                      {Object.entries(readingFixes).map(([source, reading]) => (
+                      {Object.entries(prefs.readings ?? {}).map(([source, reading]) => (
                         <span key={source} className="fix-chip">
                           {source} → {reading}
                           <button
@@ -570,6 +632,88 @@ export function SongView({ track }: { track: PlayerTrack }) {
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+          {romaji.available && romajiMode !== 'off' && (
+            <div className="review-box">
+              {reviewPending && (
+                <p className="small">
+                  <span className="spinner" aria-hidden="true" /> Claude is checking how this song is sung. This can
+                  take a minute; the romaji updates when it&apos;s done.
+                </p>
+              )}
+              {reviewFailed &&
+                (reviewError.kind === 'no_api_key' ? (
+                  <p className="muted small">
+                    To have Claude check how Japanese songs are sung, add <code>ANTHROPIC_API_KEY</code> to{' '}
+                    <code>.env.local</code> and restart the dev server.
+                  </p>
+                ) : (
+                  <p className="small">
+                    <span className="error-text">Claude&apos;s check failed: {reviewError.message}</span>{' '}
+                    <button className="link" onClick={() => setReviewError(null)}>
+                      Try again
+                    </button>
+                  </p>
+                ))}
+              {review && (
+                <>
+                  <div className="panel-title-row">
+                    <span className="small">
+                      <strong>Checked by Claude</strong>
+                      <span className="muted">
+                        {' '}
+                        ·{' '}
+                        {review.suggestions.length === 0
+                          ? 'no reading changes needed'
+                          : `${review.suggestions.length} reading ${review.suggestions.length === 1 ? 'change' : 'changes'}`}
+                      </span>
+                    </span>
+                    <button
+                      className="btn btn-small btn-ghost"
+                      onClick={() => updatePrefs((p) => ({ ...p, aiReview: undefined }))}
+                      title="Ask Claude to check this song again"
+                    >
+                      Check again
+                    </button>
+                  </div>
+                  {review.notes && <p className="muted small">{review.notes}</p>}
+                  {review.suggestions.length > 0 && (
+                    <ul className="review-list">
+                      {review.suggestions.map((s) => (
+                        <li key={s.source}>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={s.applied}
+                              onChange={(e) =>
+                                updatePrefs((p) =>
+                                  p.aiReview
+                                    ? {
+                                        ...p,
+                                        aiReview: {
+                                          ...p.aiReview,
+                                          suggestions: p.aiReview.suggestions.map((x) =>
+                                            x.source === s.source ? { ...x, applied: e.target.checked } : x,
+                                          ),
+                                        },
+                                      }
+                                    : p,
+                                )
+                              }
+                            />
+                            <span>
+                              <span lang="ja">{s.source}</span> → <strong>{s.reading}</strong>{' '}
+                              <span className={`tag confidence-${s.confidence}`}>{s.confidence}</span>
+                              <span className="muted small review-reason">{s.reason}</span>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -640,9 +784,20 @@ export function SongView({ track }: { track: PlayerTrack }) {
           onSave={(reading) => {
             updatePrefs((p) => {
               const readings = { ...p.readings }
-              if (reading === null || reading === fixingWord.standard) delete readings[fixingWord.source]
+              const backToDictionary = reading === null || reading === fixingWord.standard
+              if (backToDictionary) delete readings[fixingWord.source]
               else readings[fixingWord.source] = reading
-              return { ...p, readings }
+              // Going back to the dictionary reading also switches off Claude's suggestion for it.
+              const aiReview =
+                backToDictionary && p.aiReview
+                  ? {
+                      ...p.aiReview,
+                      suggestions: p.aiReview.suggestions.map((s) =>
+                        s.source === fixingWord.source ? { ...s, applied: false } : s,
+                      ),
+                    }
+                  : p.aiReview
+              return { ...p, readings, aiReview }
             })
             setFixingWord(null)
           }}

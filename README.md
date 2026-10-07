@@ -28,6 +28,15 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   and spells them out with [wanakana](https://wanakana.com). The dictionary (about 17MB) only
   downloads the first time a Japanese song is opened. Readings are usually right but not always,
   especially for names and unusual kanji.
+- Songs often give a word a special reading that only appears as small kana in the official
+  lyrics (瞬間 sung as "toki" rather than "shunkan"). Words that commonly get one are underlined,
+  and "Fix a reading" lets you click any romaji word and say how it's sung, for that song.
+- When a Japanese song is opened for the first time, Claude checks how it's sung (it can look the
+  song up on lyric sites that show readings) and applies the changes it's confident about. You
+  can switch each one off. This needs an Anthropic API key (see Setup) and runs once per song.
+- **Test mode** (`T`) blurs the words. A section you sing from start to end without pausing,
+  skipping or peeking is marked learned and folds away, so you can see what's left and start
+  from the first section you don't know yet.
 
 Everything you set up (sections, ratings, timing tweaks, lyrics) is saved in your browser's local
 storage.
@@ -42,6 +51,7 @@ storage.
 | L | Loop the selected sections, or the section being sung |
 | Esc | Stop looping |
 | F | Performance mode |
+| T | Test mode |
 | H (hold) | Peek at hidden words |
 | [ / ] | Show lyrics later or earlier by 0.1s |
 
@@ -73,6 +83,17 @@ without it, and since February 2026 Spotify also requires the owner of a develop
 
 6. Open http://127.0.0.1:5173 and log in.
 
+Optional: to have Claude check how Japanese songs are sung, add an Anthropic API key to
+`.env.local` and restart the dev server:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The key stays on the dev server (`server/readingReview.ts`) and is never sent to the browser.
+Each check is one Claude Opus 5.5 request with a few web searches, run once per Japanese song.
+If Claude declines a request, the API retries it on a fallback model automatically.
+
 A development-mode Spotify app allows up to 5 users. To let a friend use it, add their Spotify
 email under User Management in the dashboard.
 
@@ -89,6 +110,7 @@ The code is split by concern:
 
 - `src/spotify/`: login (PKCE), the Web API calls, and the Web Playback SDK wrapper.
 - `src/lyrics/`: the LRC parser, the LRCLIB client, section detection, and romaji.
+- `server/readingReview.ts`: the dev-server endpoint that asks Claude to check Japanese readings.
 - `scripts/copy-kuromoji-dict.mjs`: copies the Japanese dictionary into `public/` before
   `dev` and `build` (it isn't committed).
 - `src/playback/`: the playback clock (smooths position between SDK updates) and the loop
