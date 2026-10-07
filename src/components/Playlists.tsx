@@ -7,13 +7,15 @@ import {
   createPlaylist,
   deletePlaylist,
   loadLibrary,
+  masterySummary,
   movePlaylistSong,
   playlistSongs,
   renamePlaylist,
   togglePlaylistSong,
   usePlaylists,
 } from '../practice/storage'
-import { navigate } from '../router'
+import { navigate, songRoute } from '../router'
+import { playerController } from '../spotify/player'
 
 /** The + button on a song card: tick which playlists the song is in, or start a new one. */
 export function PlaylistMenu({ trackId, songName }: { trackId: string; songName: string }) {
@@ -205,8 +207,19 @@ export function PlaylistPage({ playlistId, set }: { playlistId: string; set: Son
         <div className="karaoke-results">
           {songs.map((song, i) => {
             const last = song.rehearsals.at(-1)
+            const summary = masterySummary(song.id)
             return (
-              <div key={song.id} className="karaoke-result">
+              <div
+                key={song.id}
+                className="karaoke-result is-clickable"
+                title="Open this song"
+                onClick={() => {
+                  log('playlists', 'open song', { id: playlist.id, trackId: song.id })
+                  // Going to a song's address plays it, from where you left off.
+                  playerController.activate()
+                  navigate(songRoute(song.id))
+                }}
+              >
                 <span className="playlist-index muted">{i + 1}</span>
                 {song.imageUrl ? <img src={song.imageUrl} alt="" /> : <span className="art-placeholder" />}
                 <div className="karaoke-result-text">
@@ -216,7 +229,12 @@ export function PlaylistPage({ playlistId, set }: { playlistId: string; set: Son
                     {last ? ` · last test ${last.passed}/${last.total}` : ''}
                   </span>
                 </div>
-                <span className="playlist-row-actions">
+                {summary && (
+                  <span className="library-progress small">
+                    {summary.complete ? '✓ Learned' : `${summary.known} of ${summary.total} sections learned`}
+                  </span>
+                )}
+                <span className="playlist-row-actions" onClick={(e) => e.stopPropagation()}>
                   <button className="btn btn-small btn-ghost" disabled={i === 0} onClick={() => movePlaylistSong(playlist.id, i, i - 1)} aria-label="Move up">
                     ↑
                   </button>
@@ -231,7 +249,7 @@ export function PlaylistPage({ playlistId, set }: { playlistId: string; set: Son
                   <button
                     className="btn btn-small btn-ghost"
                     onClick={() => togglePlaylistSong(playlist.id, song.id)}
-                    title="Remove from this playlist (the song stays in your library)"
+                    title="Remove from this playlist (it goes back to Your songs on the home page)"
                     aria-label="Remove from playlist"
                   >
                     ✕
