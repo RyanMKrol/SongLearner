@@ -11,13 +11,14 @@ import {
 } from '../hooks'
 import { lineIndexAt, parseLyrics } from '../lyrics/lrc'
 import type { LrclibRecord } from '../lyrics/lrclib'
+import type { RomajiWord } from '../lyrics/romaji'
 import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, type Section } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { playerController, type PlayerTrack } from '../spotify/player'
 import { LyricsPane } from './LyricsPane'
-import { PasteDialog, VersionsDialog } from './LyricsDialogs'
+import { PasteDialog, ReadingDialog, VersionsDialog } from './LyricsDialogs'
 import { PerformanceView } from './PerformanceView'
 import { DEFAULT_PRACTICE_SETTINGS, type PracticeSettings } from '../practice/settings'
 import { SectionPanel } from './SectionPanel'
@@ -25,6 +26,8 @@ import { TapSync } from './TapSync'
 import { TimingControl, Transport } from './Transport'
 
 type Overlay = null | 'tapsync' | 'performance' | 'paste' | 'versions'
+
+const NO_FIXES: Record<string, string> = {}
 
 /** Line-index-keyed prefs no longer line up once the lyrics text changes, so clear them. */
 const resetLineKeyedPrefs = (p: TrackPrefs): TrackPrefs => ({
@@ -46,6 +49,8 @@ export function SongView({ track }: { track: PlayerTrack }) {
   const [overlay, setOverlay] = useState<Overlay>(null)
   const peek = useKeyHeld('h')
   const [romajiMode, setRomajiMode] = useLocalSetting<RomajiMode>('romaji', 'below')
+  const [fixReadings, setFixReadings] = useState(false)
+  const [fixingWord, setFixingWord] = useState<RomajiWord | null>(null)
   const offset = prefs.offsetMs
 
   useEffect(() => {
@@ -69,14 +74,15 @@ export function SongView({ track }: { track: PlayerTrack }) {
     () => buildSections(lines, prefs.sectionStarts ?? autoSectionStarts(lines), prefs.sectionNames),
     [lines, prefs.sectionStarts, prefs.sectionNames],
   )
-  const romaji = useRomaji(lines)
+  const readingFixes = prefs.readings ?? NO_FIXES
+  const romaji = useRomaji(lines, readingFixes)
   const romajiLines = romajiMode === 'off' ? null : romaji.lines
   /** Sections as shown: unnamed sections take their label from the romaji when there is some. */
   const displaySections = useMemo(
     () =>
       sections.map((s) => {
         const r = romajiLines?.[s.startLine]
-        return r && !prefs.sectionNames[s.startLine] ? { ...s, name: truncate(r, 34) } : s
+        return r && !prefs.sectionNames[s.startLine] ? { ...s, name: truncate(r.text, 34) } : s
       }),
     [sections, romajiLines, prefs.sectionNames],
   )
@@ -205,7 +211,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
 
   // Keyboard shortcuts.
   useEffect(() => {
-    if (overlay === 'tapsync' || overlay === 'paste' || overlay === 'versions') return
+    if (overlay === 'tapsync' || overlay === 'paste' || overlay === 'versions' || fixingWord) return
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return
       const pos = playerController.clock.position()
@@ -262,6 +268,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [
     overlay,
+    fixingWord,
     synced,
     currentLine,
     lines,
@@ -332,6 +339,8 @@ export function SongView({ track }: { track: PlayerTrack }) {
               synced={synced}
               sections={displaySections}
               romaji={romajiLines}
+              fixReadings={fixReadings && romajiLines !== null}
+              onWordClick={setFixingWord}
               romajiMode={romajiMode}
               currentLine={currentLine}
               hideFor={hideFor}
@@ -445,6 +454,44 @@ export function SongView({ track }: { track: PlayerTrack }) {
                 <span className="muted small">Loading the Japanese dictionary (about 17MB, first time only)…</span>
               )}
               {romaji.error && <span className="error-text small">Couldn&apos;t make romaji: {romaji.error}</span>}
+              {romajiMode !== 'off' && romaji.lines && (
+                <div className="fix-readings">
+                  <button
+                    className={`btn btn-small ${fixReadings ? 'is-active' : ''}`}
+                    onClick={() => setFixReadings((v) => !v)}
+                    title="Click a romaji word in the lyrics to change how it's read"
+                  >
+                    {fixReadings ? 'Done fixing' : 'Fix a reading'}
+                  </button>
+                  <span className="muted small">
+                    {fixReadings
+                      ? 'Click any romaji word in the lyrics to change it.'
+                      : 'Dotted words are often sung differently in songs.'}
+                  </span>
+                  {Object.keys(readingFixes).length > 0 && (
+                    <div className="fix-list">
+                      {Object.entries(readingFixes).map(([source, reading]) => (
+                        <span key={source} className="fix-chip">
+                          {source} → {reading}
+                          <button
+                            className="fix-chip-remove"
+                            aria-label={`Remove the fix for ${source}`}
+                            onClick={() =>
+                              updatePrefs((p) => {
+                                const readings = { ...p.readings }
+                                delete readings[source]
+                                return { ...p, readings }
+                              })
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {saved && (
@@ -481,7 +528,7 @@ export function SongView({ track }: { track: PlayerTrack }) {
       {overlay === 'tapsync' && (
         <TapSync
           lines={lines.filter(isSung)}
-          romaji={romajiLines && lines.flatMap((l, i) => (isSung(l) ? [romajiLines[i]] : []))}
+          romaji={romajiLines && lines.flatMap((l, i) => (isSung(l) ? [romajiLines[i]?.text ?? null] : []))}
           onClose={closeOverlay}
           onSave={(lrc) => applyLyrics({ text: lrc, synced: true, source: 'user', label: 'Timed by you' })}
         />
@@ -507,6 +554,21 @@ export function SongView({ track }: { track: PlayerTrack }) {
         />
       )}
       {overlay === 'versions' && <VersionsDialog track={track} onPick={pickVersion} onClose={closeOverlay} />}
+      {fixingWord && (
+        <ReadingDialog
+          word={fixingWord}
+          onClose={() => setFixingWord(null)}
+          onSave={(reading) => {
+            updatePrefs((p) => {
+              const readings = { ...p.readings }
+              if (reading === null || reading === fixingWord.standard) delete readings[fixingWord.source]
+              else readings[fixingWord.source] = reading
+              return { ...p, readings }
+            })
+            setFixingWord(null)
+          }}
+        />
+      )}
     </main>
   )
 }

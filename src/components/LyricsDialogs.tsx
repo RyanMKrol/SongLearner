@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { formatTime } from '../hooks'
 import { cleanTrackName, searchLrclib, type LrclibRecord } from '../lyrics/lrclib'
+import { normaliseReading, type RomajiWord } from '../lyrics/romaji'
 import type { PlayerTrack } from '../spotify/player'
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -120,6 +121,84 @@ export function PasteDialog({ onSave, onClose }: { onSave: (text: string) => voi
         </button>
         <button className="btn btn-primary" disabled={!text.trim()} onClick={() => onSave(text)}>
           Use these lyrics
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+/** Change how one word is read in this song, e.g. 瞬間 sung as "toki" rather than "shunkan". */
+export function ReadingDialog({
+  word,
+  onSave,
+  onClose,
+}: {
+  word: RomajiWord
+  /** The new romaji, or null to go back to the dictionary reading. */
+  onSave: (reading: string | null) => void
+  onClose: () => void
+}) {
+  const [value, setValue] = useState(word.text)
+  const options = [...new Set([word.standard, ...word.alternatives])]
+  const save = () => {
+    const reading = normaliseReading(value)
+    onSave(reading ? reading : null)
+  }
+
+  return (
+    <Modal title="How is this word sung?" onClose={onClose}>
+      <div className="reading-word">
+        <span className="reading-source" lang="ja">
+          {word.source}
+        </span>
+        <span className="muted">
+          dictionary reading: <strong className="text">{word.standard}</strong>
+        </span>
+      </div>
+      {word.alternatives.length > 0 && (
+        <p className="muted small">
+          Songs often give this word a special reading, shown in small kana above it in the official
+          lyrics. Pick the one you hear, or type your own.
+        </p>
+      )}
+      <div className="reading-options">
+        {options.map((option) => (
+          <button
+            key={option}
+            className={`btn ${normaliseReading(value) === option ? 'is-active' : ''}`}
+            onClick={() => setValue(option)}
+          >
+            {option}
+            {option === word.standard ? ' (dictionary)' : ''}
+          </button>
+        ))}
+      </div>
+      <label className="reading-input">
+        <span className="small muted">Sung as (romaji or kana)</span>
+        <input
+          className="search-input"
+          value={value}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save()
+          }}
+        />
+      </label>
+      <p className="muted small">
+        Applies to every “{word.source}” in this song. Other songs aren&apos;t affected.
+      </p>
+      <div className="modal-actions">
+        {word.fixed && (
+          <button className="btn btn-ghost" onClick={() => onSave(null)}>
+            Use dictionary reading
+          </button>
+        )}
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" disabled={!value.trim()} onClick={save}>
+          Save
         </button>
       </div>
     </Modal>

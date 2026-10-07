@@ -1,13 +1,15 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { hasJapanese, loadTokenizer, romanizeTokens } from '../lyrics/romaji'
+import { hasJapanese, loadTokenizer, normaliseReading, romanizeTokens, type ReadingFixes } from '../lyrics/romaji'
 
 // Vitest runs from the project root, where Node's loader reads the dictionary straight from disk.
 const dicPath = 'node_modules/@sglkc/kuromoji/dict/'
 let romaji: (text: string) => string
+let romajiLine: (text: string, fixes?: ReadingFixes) => ReturnType<typeof romanizeTokens>
 
 beforeAll(async () => {
   const tokenizer = await loadTokenizer(dicPath)
-  romaji = (text) => romanizeTokens(tokenizer.tokenize(text))
+  romajiLine = (text, fixes) => romanizeTokens(tokenizer.tokenize(text), fixes)
+  romaji = (text) => romajiLine(text).text
 })
 
 describe('hasJapanese', () => {
@@ -42,5 +44,38 @@ describe('romanizeTokens', () => {
   it('leaves English alone and handles full-width spaces and brackets', () => {
     expect(romaji('Hello 世界、ラブソング')).toBe('Hello sekai, rabusongu')
     expect(romaji('明日また会おうね　「さよなら」')).toBe('ashita mata aou ne sayonara')
+  })
+})
+
+describe('reading fixes', () => {
+  it('applies a fix to every match and keeps the standard reading', () => {
+    const line = romajiLine('永遠の瞬間を永遠に', { 永遠: 'towa' })
+    expect(line.text).toBe('towa no shunkan o towa ni')
+    const fixed = line.words.filter((w) => w.fixed)
+    expect(fixed.map((w) => [w.source, w.standard, w.text])).toEqual([
+      ['永遠', 'eien', 'towa'],
+      ['永遠', 'eien', 'towa'],
+    ])
+  })
+
+  it('suggests common lyric readings', () => {
+    const word = romajiLine('瞬間を待つ').words.find((w) => w.source === '瞬間')
+    expect(word).toMatchObject({ text: 'shunkan', alternatives: ['toki'], fixed: false })
+  })
+
+  it('keeps the original text of glued words so they can be fixed too', () => {
+    const line = romajiLine('抱いて眠る', { 抱いて: 'idaite' })
+    expect(line.text).toBe('idaite nemuru')
+  })
+
+  it('lays out punctuation and spaces like the plain text', () => {
+    const line = romajiLine('待って、ずっと　ここで')
+    expect(line.text).toBe('matte, zutto koko de')
+    expect(line.words.map((w) => w.spaceBefore)).toEqual([false, false, true, true, true])
+  })
+
+  it('accepts readings typed in kana or romaji', () => {
+    expect(normaliseReading(' とき ')).toBe('toki')
+    expect(normaliseReading('Toki')).toBe('toki')
   })
 })

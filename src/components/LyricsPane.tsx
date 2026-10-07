@@ -4,6 +4,7 @@ import { isSung, type Section } from '../lyrics/sections'
 import type { HideLevel } from '../practice/mask'
 import type { Mastery } from '../practice/storage'
 import type { RomajiMode } from '../hooks'
+import type { RomajiLine, RomajiWord } from '../lyrics/romaji'
 import { LyricWithRomaji } from './LyricText'
 
 interface Props {
@@ -14,8 +15,11 @@ interface Props {
   hideFor: (lineIndex: number) => HideLevel
   peek: boolean
   /** Romaji per line for Japanese lyrics, once it's ready. */
-  romaji: (string | null)[] | null
+  romaji: (RomajiLine | null)[] | null
   romajiMode: RomajiMode
+  /** When on, romaji words are buttons for correcting their reading. */
+  fixReadings: boolean
+  onWordClick: (word: RomajiWord) => void
   /** Lines being practised right now; everything else is dimmed. */
   activeLines: { from: number; to: number } | null
   selection: { from: number; to: number } | null
@@ -129,6 +133,8 @@ export function LyricsPane(props: Props) {
                     mode={props.romajiMode}
                     level={props.hideFor(i)}
                     peek={props.peek}
+                    fixMode={props.fixReadings}
+                    onWordClick={props.onWordClick}
                   />
                   </span>
                 ) : (

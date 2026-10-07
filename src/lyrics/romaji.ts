@@ -16,7 +16,66 @@ interface Piece {
   text: string
   /** Kana still to be converted (words only). Kept separate so glued parts convert together. */
   kana: boolean
+  /** The original text this piece came from. */
+  source: string
+  /** Set when the user has fixed this word's reading. */
+  fixedText?: string
   token?: IpadicFeatures
+}
+
+export interface RomajiWord {
+  kind: 'word' | 'punct'
+  /** Romaji as shown, after any fix. */
+  text: string
+  /** The Japanese this word came from, e.g. 瞬間 or 抱いて. */
+  source: string
+  /** What the dictionary reads it as, before any fix. */
+  standard: string
+  /** Readings lyricists often use instead, e.g. "toki" for 瞬間. */
+  alternatives: string[]
+  fixed: boolean
+  spaceBefore: boolean
+}
+
+export interface RomajiLine {
+  text: string
+  words: RomajiWord[]
+}
+
+/** Per-song corrections: original word → romaji as sung. */
+export type ReadingFixes = Record<string, string>
+
+/**
+ * Words that song lyrics often give a special reading, shown in small kana above the kanji in
+ * the official lyrics. That reading never reaches the plain lyric text, so it can't be detected;
+ * these are offered as suggestions instead.
+ */
+export const COMMON_LYRIC_READINGS: Record<string, string[]> = {
+  瞬間: ['toki'],
+  時間: ['toki'],
+  季節: ['toki'],
+  時代: ['toki'],
+  永遠: ['towa'],
+  永久: ['towa'],
+  運命: ['sadame'],
+  宿命: ['sadame'],
+  地球: ['hoshi'],
+  宇宙: ['sora'],
+  理由: ['wake'],
+  本気: ['maji'],
+  本当: ['honto'],
+  未来: ['ashita', 'asu'],
+  明日: ['asu'],
+  現在: ['ima'],
+  故郷: ['furusato'],
+  他人: ['hito'],
+  恋人: ['hito'],
+  女: ['hito'],
+  男: ['hito'],
+  友達: ['tomo'],
+  仲間: ['tomo'],
+  都会: ['machi'],
+  心: ['mune'],
 }
 
 const isVerbLike = (t?: IpadicFeatures) =>
@@ -117,7 +176,7 @@ function readingOf(token: IpadicFeatures): string {
 }
 
 /** Romaji for one tokenised line. Exported for tests; the app uses `romanizeLines`. */
-export function romanizeTokens(tokens: IpadicFeatures[]): string {
+export function romanizeTokens(tokens: IpadicFeatures[], fixes: ReadingFixes = {}): RomajiLine {
   const pieces: Piece[] = []
   for (const token of mergeCounters(tokens)) {
     const surface = token.surface_form.replace(DROPPED, '')
@@ -125,50 +184,74 @@ export function romanizeTokens(tokens: IpadicFeatures[]): string {
     const last = pieces.at(-1)
 
     if (/^\s+$/u.test(surface) || surface === '・') {
-      pieces.push({ kind: 'space', text: ' ', kana: false })
+      pieces.push({ kind: 'space', text: ' ', kana: false, source: surface })
       continue
     }
     if (token.pos === '記号' || !/[\p{L}\p{N}]/u.test(surface)) {
-      pieces.push({ kind: 'punct', text: toRomaji(surface), kana: false })
+      pieces.push({ kind: 'punct', text: toRomaji(surface), kana: false, source: surface })
       continue
     }
     if (!hasJapanese(surface)) {
       // English words and numbers stay as they are.
-      pieces.push({ kind: 'word', text: surface, kana: false, token })
+      pieces.push({ kind: 'word', text: surface, kana: false, source: surface, token })
+      continue
+    }
+
+    const reading = readingOf(token)
+    if (fixes[surface]) {
+      // A fixed word stands alone, so nothing glues onto it and changes what it matches.
+      pieces.push({ kind: 'word', text: reading, kana: false, source: surface, fixedText: fixes[surface], token })
       continue
     }
 
     const particle = particleRomaji(token)
     if (particle) {
-      pieces.push({ kind: 'word', text: particle, kana: false, token })
+      pieces.push({ kind: 'word', text: particle, kana: false, source: surface, token })
       continue
     }
 
-    const reading = readingOf(token)
-    if (last?.kind === 'word' && last.kana && attachesToPrevious(token, last.token)) {
+    if (last?.kind === 'word' && last.kana && !last.fixedText && attachesToPrevious(token, last.token)) {
       last.text += reading
+      last.source += surface
       last.token = token
     } else {
-      pieces.push({ kind: 'word', text: reading, kana: true, token })
+      pieces.push({ kind: 'word', text: reading, kana: true, source: surface, token })
     }
   }
 
-  let out = ''
-  let previous: Piece | undefined
+  const words: RomajiWord[] = []
+  let pendingSpace = false
   for (const piece of pieces) {
-    const text = piece.kana ? toRomaji(piece.text) : piece.text
     if (piece.kind === 'space') {
-      if (out && !out.endsWith(' ')) out += ' '
-    } else if (piece.kind === 'punct') {
-      out = out.trimEnd() + text
-    } else {
-      const needsSpace =
-        out.length > 0 && !out.endsWith(' ') && !(previous?.kind === 'punct' && OPENING.has(previous.text))
-      out += (needsSpace ? ' ' : '') + text
+      pendingSpace = words.length > 0
+      continue
     }
-    previous = piece
+    const standard = piece.kana || hasJapanese(piece.text) ? toRomaji(piece.text) : piece.text
+    const fix = piece.fixedText ?? (piece.kind === 'word' ? fixes[piece.source] : undefined)
+    const previous = words.at(-1)
+    words.push({
+      kind: piece.kind === 'punct' ? 'punct' : 'word',
+      text: fix ?? standard,
+      source: piece.source,
+      standard,
+      alternatives: piece.kind === 'word' ? (COMMON_LYRIC_READINGS[piece.source] ?? []) : [],
+      fixed: fix !== undefined,
+      spaceBefore:
+        piece.kind === 'word' &&
+        previous !== undefined &&
+        !(previous.kind === 'punct' && OPENING.has(previous.text)),
+    })
+    // Punctuation hugs the word before it; a following word still gets its space.
+    if (piece.kind === 'punct' && pendingSpace) words[words.length - 1].spaceBefore = false
+    pendingSpace = false
   }
-  return out.replace(/\s+/g, ' ').trim()
+
+  const text = words
+    .map((w) => (w.spaceBefore ? ' ' : '') + w.text)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { text, words }
 }
 
 let tokenizerPromise: Promise<Tokenizer<IpadicFeatures>> | null = null
@@ -214,8 +297,14 @@ export function loadTokenizer(dicPath = `${import.meta.env.BASE_URL}kuromoji-dic
 }
 
 /** Romaji for each line, or null for lines with no Japanese in them. */
-export async function romanizeLines(texts: string[]): Promise<(string | null)[]> {
+export async function romanizeLines(texts: string[], fixes: ReadingFixes = {}): Promise<(RomajiLine | null)[]> {
   if (!texts.some(hasJapanese)) return texts.map(() => null)
   const tokenizer = await loadTokenizer()
-  return texts.map((text) => (hasJapanese(text) ? romanizeTokens(tokenizer.tokenize(text)) : null))
+  return texts.map((text) => (hasJapanese(text) ? romanizeTokens(tokenizer.tokenize(text), fixes) : null))
+}
+
+/** Accepts a reading typed as romaji or kana and returns romaji. */
+export function normaliseReading(input: string): string {
+  const trimmed = input.trim()
+  return (hasJapanese(trimmed) ? toRomaji(trimmed) : trimmed).toLowerCase()
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { usePlayer, usePosition, useDerivedFromPosition, type RomajiMode } from '../hooks'
 import { lineIndexAt, type LyricLine } from '../lyrics/lrc'
+import type { RomajiLine } from '../lyrics/romaji'
 import { isSung } from '../lyrics/sections'
 import type { HideLevel } from '../practice/mask'
 import { playerController } from '../spotify/player'
@@ -22,7 +23,7 @@ export function PerformanceView({
   durationMs: number
   hideFor: (lineIndex: number) => HideLevel
   peek: boolean
-  romaji: (string | null)[] | null
+  romaji: (RomajiLine | null)[] | null
   romajiMode: RomajiMode
   onClose: () => void
 }) {

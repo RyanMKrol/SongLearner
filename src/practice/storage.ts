@@ -14,6 +14,8 @@ export interface TrackPrefs {
   sectionNames: Record<number, string>
   mastery: Record<number, Mastery>
   hide: Record<number, HideLevel>
+  /** Romaji corrections for this song: original word → how it's sung. */
+  readings?: Record<string, string>
 }
 
 export interface SavedLyrics {

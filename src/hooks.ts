@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { LyricLine } from './lyrics/lrc'
 import { findLyrics } from './lyrics/lrclib'
-import { hasJapanese, romanizeLines } from './lyrics/romaji'
+import { hasJapanese, romanizeLines, type ReadingFixes, type RomajiLine } from './lyrics/romaji'
 import { LoopController, type LoopOptions, type LoopStatus, type PracticeStep } from './playback/loop'
 import { loadSavedLyrics, saveLyrics, type SavedLyrics } from './practice/storage'
 import { playerController, type PlayerTrack } from './spotify/player'
@@ -111,32 +111,37 @@ export interface RomajiState {
   loading: boolean
   error: string | null
   /** Romaji per line (null for lines with no Japanese), once ready. */
-  lines: (string | null)[] | null
+  lines: (RomajiLine | null)[] | null
 }
 
 /** Works out romaji for Japanese lyrics. The dictionary only downloads when it's needed. */
-export function useRomaji(lines: LyricLine[]): RomajiState {
+export function useRomaji(lines: LyricLine[], fixes: ReadingFixes): RomajiState {
   const available = useMemo(() => lines.some((l) => hasJapanese(l.text)), [lines])
   const [result, setResult] = useState<{
     source: LyricLine[]
-    lines: (string | null)[] | null
+    fixes: ReadingFixes
+    lines: (RomajiLine | null)[] | null
     error: string | null
   } | null>(null)
 
   useEffect(() => {
     if (!available) return
     let cancelled = false
-    romanizeLines(lines.map((l) => l.text))
-      .then((romaji) => !cancelled && setResult({ source: lines, lines: romaji, error: null }))
+    romanizeLines(
+      lines.map((l) => l.text),
+      fixes,
+    )
+      .then((romaji) => !cancelled && setResult({ source: lines, fixes, lines: romaji, error: null }))
       .catch((e: unknown) => {
         if (cancelled) return
-        setResult({ source: lines, lines: null, error: e instanceof Error ? e.message : String(e) })
+        setResult({ source: lines, fixes, lines: null, error: e instanceof Error ? e.message : String(e) })
       })
     return () => {
       cancelled = true
     }
-  }, [lines, available])
+  }, [lines, fixes, available])
 
+  // While a new fix is being applied, keep showing the previous romaji rather than flashing empty.
   const current = result?.source === lines ? result : null
   return {
     available,
