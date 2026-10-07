@@ -550,6 +550,29 @@ kbd {
   gap: 2px;
 }
 
+.library-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(14, 14, 19, 0.95);
+  border: 1px solid var(--danger);
+}
+
+.library-confirm p {
+  margin: 0;
+}
+
+.library-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);

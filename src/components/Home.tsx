@@ -4,13 +4,15 @@ import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
 import { PlaylistMenu, PlaylistsSection } from './Playlists'
 import { log, logError } from '../log'
 import { playerController } from '../spotify/player'
-import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, type LibraryEntry } from '../practice/storage'
+import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, usePlaylists, type LibraryEntry } from '../practice/storage'
 
 export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) => void; onKaraoke: () => void }) {
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
   const [learnedCount] = useState(() => loadLearnedSongs().length)
+  const playlists = usePlaylists()
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const ready = player.status === 'ready' && player.deviceId
 
   const open = async (entry: LibraryEntry) => {
@@ -28,6 +30,13 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
       logError('home', 'could not start song', { trackId: entry.id, error: e })
       setMessage(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  const remove = (entry: LibraryEntry) => {
+    log('home', 'delete song', { trackId: entry.id })
+    deleteSong(entry.id)
+    setConfirmDelete(null)
+    setLibrary(loadLibrary())
   }
 
   const bringHere = async () => {
@@ -90,6 +99,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           <div className="library">
             {library.map((entry) => {
               const summary = masterySummary(entry.id)
+              const inPlaylists = playlists.filter((p) => p.trackIds.includes(entry.id))
               return (
                 <div key={entry.id} className="library-card">
                   <button className="library-open" disabled={!ready} onClick={() => void open(entry)}>
@@ -111,13 +121,39 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
                     title="Delete this song and everything saved for it"
                     aria-label={`Delete ${entry.name}`}
                     onClick={() => {
-                      log('home', 'delete song', { trackId: entry.id })
-                      deleteSong(entry.id)
-                      setLibrary(loadLibrary())
+                      // Only ask first when the song is in a playlist, since deleting takes it out of those too.
+                      if (inPlaylists.length > 0) {
+                        setConfirmDelete(entry.id)
+                        return
+                      }
+                      remove(entry)
                     }}
                   >
                     ×
                   </button>
+                  {confirmDelete === entry.id && (
+                    <div className="library-confirm" role="alertdialog" aria-label={`Delete ${entry.name}?`}>
+                      <p className="small">
+                        <strong>{entry.name}</strong> is in{' '}
+                        {inPlaylists.length === 1 ? (
+                          <>
+                            your playlist <strong>{inPlaylists[0].name}</strong>
+                          </>
+                        ) : (
+                          <>{inPlaylists.length} playlists</>
+                        )}
+                        . Delete it from your songs and {inPlaylists.length === 1 ? 'that playlist' : 'those playlists'}?
+                      </p>
+                      <div className="library-confirm-actions">
+                        <button className="btn btn-small btn-danger" onClick={() => remove(entry)}>
+                          Delete
+                        </button>
+                        <button className="btn btn-small" onClick={() => setConfirmDelete(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
