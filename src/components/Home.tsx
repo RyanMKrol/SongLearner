@@ -9,7 +9,6 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [learnedCount] = useState(() => loadLearnedSongs().length)
   const ready = player.status === 'ready' && player.deviceId
 
@@ -109,34 +108,14 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
                     className="library-remove"
                     title="Delete this song and everything saved for it"
                     aria-label={`Delete ${entry.name}`}
-                    onClick={() => setConfirmDelete(entry.id)}
+                    onClick={() => {
+                      log('home', 'delete song', { trackId: entry.id })
+                      deleteSong(entry.id)
+                      setLibrary(loadLibrary())
+                    }}
                   >
                     ×
                   </button>
-                  {confirmDelete === entry.id && (
-                    <div className="library-confirm" role="alertdialog" aria-label={`Delete ${entry.name}?`}>
-                      <p className="small">
-                        Delete <strong>{entry.name}</strong> and everything saved for it: lyrics, your edits, sections
-                        and progress?
-                      </p>
-                      <div className="library-confirm-actions">
-                        <button
-                          className="btn btn-small btn-danger"
-                          onClick={() => {
-                            log('home', 'delete song', { trackId: entry.id })
-                            deleteSong(entry.id)
-                            setConfirmDelete(null)
-                            setLibrary(loadLibrary())
-                          }}
-                        >
-                          Delete
-                        </button>
-                        <button className="btn btn-small" onClick={() => setConfirmDelete(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )
             })}
