@@ -14,7 +14,17 @@ import { appendTapped, lineIndexAt, parseLyrics, toLrc } from '../lyrics/lrc'
 import { getLrclibRecord, type LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
 import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
-import { autoSectionStarts, buildSections, isSung, sectionTimings, truncate, type Section } from '../lyrics/sections'
+import {
+  autoSectionStarts,
+  buildSections,
+  innerAutoStarts,
+  isSung,
+  mergeStarts,
+  sectionTimings,
+  splitStarts,
+  truncate,
+  type Section,
+} from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import type { HideLevel } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
@@ -491,6 +501,52 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     setSelection(null)
   }
 
+  /** Turns sections `from`..`to` into one bigger section, for learning in larger chunks. */
+  const mergeSections = (from: number, to: number) => {
+    if (to <= from) return
+    const first = sections[from]
+    const parts = sections.slice(from, to + 1)
+    log('sections', 'merged', { from, to, startLines: parts.map((s) => s.startLine) })
+    updatePrefs((p) => {
+      const mastery = { ...p.mastery }
+      const hide = { ...p.hide }
+      const sectionNames = { ...p.sectionNames }
+      // Learned only if every part was, so merging never marks anything learned by accident.
+      const merged = Math.min(...parts.map((s) => p.mastery[s.startLine] ?? 0)) as Mastery
+      for (const s of parts.slice(1)) {
+        delete mastery[s.startLine]
+        delete hide[s.startLine]
+        delete sectionNames[s.startLine]
+      }
+      if (merged > 0) mastery[first.startLine] = merged
+      else delete mastery[first.startLine]
+      return { ...p, sectionStarts: mergeStarts(sections, from, to), mastery, hide, sectionNames }
+    })
+    setSelection({ from, to: from })
+  }
+
+  /** Splits a merged section back into its automatic parts, which inherit its rating. */
+  const splitSection = (index: number) => {
+    const section = sections[index]
+    if (!section) return
+    const auto = autoSectionStarts(lines)
+    const inner = innerAutoStarts(section, auto)
+    if (inner.length === 0) return
+    log('sections', 'split', { index, startLine: section.startLine, into: inner.length + 1 })
+    updatePrefs((p) => {
+      const mastery = { ...p.mastery }
+      const hide = { ...p.hide }
+      for (const start of inner) {
+        if (p.mastery[section.startLine] !== undefined) mastery[start] = p.mastery[section.startLine]
+        if (p.hide[section.startLine] !== undefined) hide[start] = p.hide[section.startLine]
+      }
+      return { ...p, sectionStarts: splitStarts(sections, index, auto), mastery, hide }
+    })
+    setSelection(null)
+  }
+  const autoStarts = useMemo(() => autoSectionStarts(lines), [lines])
+  const canSplit = (section: Section) => innerAutoStarts(section, autoStarts).length > 0
+
   const setOffset = useCallback(
     (ms: number) => updatePrefs((p) => ({ ...p, offsetMs: Math.max(-5000, Math.min(5000, Math.round(ms))) })),
     [updatePrefs],
@@ -879,6 +935,9 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
             onSettings={setSettings}
             onLoop={loop}
             onBuildUp={buildUp}
+            onMerge={mergeSections}
+            canSplit={canSplit}
+            onSplit={splitSection}
             practice={practice.status}
             finished={practice.finished}
             onStop={stopPractice}

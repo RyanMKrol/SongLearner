@@ -11,7 +11,8 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   current line is highlighted and the view follows along. Click any line to jump there.
 - Splits the lyrics into sections automatically (from stanza breaks and instrumental gaps) and
   marks parts that repeat with the same letter, so the song's shape is easy to see. You can rename
-  sections and move the splits.
+  sections, move the splits, and merge a run of sections into one bigger section to learn in
+  larger chunks (and split it back later).
 - **Loop** a section or a run of sections, with a short run-up before it and an optional pause
   between repeats.
 - **Build up** drills a run of sections cumulatively: A, then A+B, then A+B+C. Optionally each new

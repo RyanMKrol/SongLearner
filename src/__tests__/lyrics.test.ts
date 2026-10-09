@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { appendTapped, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
 import { chooseRecord, cleanTrackName, fixLongVowels, normaliseName, type LrclibRecord } from '../lyrics/lrclib'
-import { autoSectionStarts, buildSections, sectionTimings } from '../lyrics/sections'
+import { autoSectionStarts, buildSections, innerAutoStarts, mergeStarts, sectionTimings, splitStarts } from '../lyrics/sections'
 
 // Made-up lyrics shaped like a typical LRCLIB file: verse, chorus, verse, chorus, outro.
 const SONG = `[ar:Test Artist]
@@ -114,6 +114,21 @@ describe('sections', () => {
   it('splits very long blocks into chunks', () => {
     const text = Array.from({ length: 20 }, (_, i) => `[00:${String(i * 2).padStart(2, '0')}.00] Line ${i}`).join('\n')
     expect(autoSectionStarts(parseLrc(text).lines)).toEqual([0, 7, 14])
+  })
+
+  it('merges a run of sections and splits them back', () => {
+    const auto = autoSectionStarts(lines)
+    const sections = buildSections(lines, auto)
+    // Merge verse 1 + chorus 1 + verse 2.
+    const merged = buildSections(lines, mergeStarts(sections, 0, 2))
+    expect(merged.map((s) => [s.startLine, s.endLine])).toEqual([
+      [0, 11],
+      [12, 15],
+      [16, 17],
+    ])
+    expect(innerAutoStarts(merged[0], auto)).toEqual([4, 8])
+    expect(innerAutoStarts(merged[1], auto)).toEqual([])
+    expect(splitStarts(merged, 0, auto)).toEqual(auto)
   })
 
   it('ends a section at the next line, but caps long instrumental tails', () => {

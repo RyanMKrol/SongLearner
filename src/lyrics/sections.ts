@@ -195,3 +195,20 @@ export function sectionTimings(
     return { startMs: start, endMs: Math.min(natural, lastStart + cap) }
   })
 }
+
+/** Section start lines after merging sections `from`..`to` into one. */
+export function mergeStarts(sections: Section[], from: number, to: number): number[] {
+  return sections.filter((s) => s.index <= from || s.index > to).map((s) => s.startLine)
+}
+
+/** Automatic split points that fall inside a section (non-empty for a merged section). */
+export function innerAutoStarts(section: Section, autoStarts: number[]): number[] {
+  return autoStarts.filter((start) => start > section.startLine && start <= section.endLine)
+}
+
+/** Section start lines after splitting a section back into its automatic parts. */
+export function splitStarts(sections: Section[], index: number, autoStarts: number[]): number[] {
+  const section = sections[index]
+  if (!section) return sections.map((s) => s.startLine)
+  return [...new Set([...sections.map((s) => s.startLine), ...innerAutoStarts(section, autoStarts)])].sort((a, b) => a - b)
+}

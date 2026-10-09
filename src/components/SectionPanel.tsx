@@ -30,6 +30,11 @@ interface Props {
   onSettings: (s: PracticeSettings) => void
   onLoop: (from: number, to: number) => void
   onBuildUp: (from: number, to: number) => void
+  /** Turn sections from..to into one. */
+  onMerge: (from: number, to: number) => void
+  /** Whether a section was merged (has automatic splits inside it). */
+  canSplit: (section: Section) => boolean
+  onSplit: (index: number) => void
   practice: LoopStatus | null
   finished: { fromSection: number; toSection: number } | null
   onStop: () => void
@@ -158,6 +163,15 @@ export function SectionPanel(props: Props) {
                 {timing && <span className="muted small section-row-time">{formatTime(timing.startMs)}</span>}
               </span>
               <span className="section-row-controls" onClick={(e) => e.stopPropagation()}>
+                {props.canSplit(section) && (
+                  <button
+                    className="btn btn-small btn-ghost"
+                    title="Split this merged section back into its parts"
+                    onClick={() => props.onSplit(section.index)}
+                  >
+                    Split
+                  </button>
+                )}
                 <span className="mastery-picker" title={`Mastery: ${MASTERY_LABELS[mastery]}`}>
                   {([1, 2, 3] as Mastery[]).map((m) => (
                     <button
@@ -202,6 +216,17 @@ export function SectionPanel(props: Props) {
               'Click a section to select it. Shift-click another to select a run.'
             )}
           </div>
+          {sel && sel.from !== sel.to && (
+            <div className="practice-actions">
+              <button
+                className="btn"
+                title="Make the selected sections one bigger section, to loop, rate and test as a whole"
+                onClick={() => props.onMerge(sel.from, sel.to)}
+              >
+                Merge into one section
+              </button>
+            </div>
+          )}
           <div className="practice-actions">
             <button
               className="btn btn-primary"
