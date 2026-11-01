@@ -35,6 +35,7 @@ import { rememberPosition } from '../playback/positions'
 import { playerController, type PlayerTrack } from '../spotify/player'
 import { EndOfLyrics } from './EndOfLyrics'
 import { LyricsPane, type LineFill } from './LyricsPane'
+import type { LeadInTiming } from '../playback/leadIn'
 import { PasteDialog, ReadingDialog, VersionsDialog } from './LyricsDialogs'
 import { PerformanceView } from './PerformanceView'
 import { DEFAULT_PRACTICE_SETTINGS, type PracticeSettings } from '../practice/settings'
@@ -358,6 +359,21 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
         ? { words: (lineIndex, shown) => wordTimesFor(wordTiming, lineIndex, shown), now: lyricNow }
         : null,
     [wordTiming, fillOn, lyricNow],
+  )
+  // Counting in after an intro or a break. Word timings say exactly when singing starts and stops;
+  // without them, a line is assumed to be sung for at most 6 seconds.
+  const leadIn = useMemo<LeadInTiming>(
+    () => ({
+      now: lyricNow,
+      start: (i) => wordTiming?.lines[i]?.words[0]?.startMs ?? lines[i]?.timeMs ?? null,
+      end: (i) => {
+        const words = wordTiming?.lines[i]?.words
+        if (words?.length) return words[words.length - 1].endMs
+        const t = lines[i]?.timeMs
+        return t == null ? null : t + 6000
+      },
+    }),
+    [lyricNow, wordTiming, lines],
   )
   // Japanese lines are aligned by their romaji, so wait for it.
   const alignReady = synced && lines.some(isSung) && (!romaji.available || romaji.lines !== null)
@@ -992,6 +1008,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               onToggleSplit={toggleSplit}
               onEditLine={editWords && !testMode && !outro ? editLine : null}
               fill={fill}
+              leadIn={synced ? leadIn : null}
               onLineClick={seekToLine}
               onSectionClick={selectSection}
               onSectionLoop={(i) => loop(i, i)}
@@ -1317,6 +1334,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
           romaji={romajiLines}
           romajiMode={romajiMode}
           fill={fill}
+          leadIn={leadIn}
           lines={lines}
           offsetMs={offset}
           durationMs={track.durationMs}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PlaybackClock } from '../playback/clock'
 import { LoopController, buildUpPlan, chainPlan } from '../playback/loop'
+import { leadInFor } from '../playback/leadIn'
 import { fadeMask, maskText } from '../practice/mask'
 
 const timings = [
@@ -151,5 +152,22 @@ describe('maskText', () => {
 
   it('leaves text alone at level 0', () => {
     expect(maskText('Hey', 0)).toEqual([{ text: 'Hey', masked: false }])
+  })
+})
+
+describe('leadInFor', () => {
+  const timing = {
+    now: () => 0,
+    start: (i: number) => [1000, 5000, 30000][i] ?? null,
+    end: (i: number) => [4000, 9000, 33000][i] ?? null,
+  }
+
+  it('counts in straight away during the intro or a gap line', () => {
+    expect(leadInFor(timing, -1, false, 0)).toEqual({ waitFromMs: Number.NEGATIVE_INFINITY, startMs: 1000 })
+    expect(leadInFor(timing, 1, false, 2)).toEqual({ waitFromMs: Number.NEGATIVE_INFINITY, startMs: 30000 })
+  })
+
+  it('after a sung line, waits for it to end', () => {
+    expect(leadInFor(timing, 1, true, 2)).toEqual({ waitFromMs: 9000, startMs: 30000 })
   })
 })

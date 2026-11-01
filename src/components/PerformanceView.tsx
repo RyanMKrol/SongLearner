@@ -7,6 +7,8 @@ import type { Mask } from '../practice/mask'
 import { playerController } from '../spotify/player'
 import { LyricWithRomaji } from './LyricText'
 import type { LineFill } from './LyricsPane'
+import { leadInFor, type LeadInTiming } from '../playback/leadIn'
+import { LeadIn } from './LeadIn'
 
 /** Full-screen, distraction-free view for singing the whole song through. */
 export function PerformanceView({
@@ -18,6 +20,7 @@ export function PerformanceView({
   romaji,
   romajiMode,
   fill,
+  leadIn,
   onClose,
 }: {
   lines: LyricLine[]
@@ -28,6 +31,7 @@ export function PerformanceView({
   romaji: (RomajiLine | null)[] | null
   romajiMode: RomajiMode
   fill?: LineFill | null
+  leadIn?: LeadInTiming | null
   onClose: () => void
 }) {
   const player = usePlayer()
@@ -72,6 +76,8 @@ export function PerformanceView({
     return null
   })()
 
+  const lead = leadIn && upcoming.length > 0 ? leadInFor(leadIn, current, currentIsSung, upcoming[0]) : null
+
   return (
     <div className="performance" onDoubleClick={onClose}>
       <div className="performance-lines">
@@ -83,6 +89,7 @@ export function PerformanceView({
         </div>
         {upcoming.map((i, k) => (
           <div key={i} className={k === 0 ? 'perf-next' : 'perf-later'}>
+            {k === 0 && lead && leadIn && <LeadIn {...lead} now={leadIn.now} />}
             {show(i)}
           </div>
         ))}

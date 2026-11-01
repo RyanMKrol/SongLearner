@@ -6,6 +6,8 @@ import type { Mastery } from '../practice/storage'
 import type { RomajiMode } from '../hooks'
 import type { RomajiLine, RomajiWord } from '../lyrics/romaji'
 import type { WordTime } from '../lyrics/wordAlign'
+import { leadInFor, type LeadInTiming } from '../playback/leadIn'
+import { LeadIn } from './LeadIn'
 import { LyricWithRomaji } from './LyricText'
 
 interface Props {
@@ -31,6 +33,8 @@ interface Props {
   onToggleSplit: (lineIndex: number) => void
   /** Karaoke fill for the line being sung, when word timings are known. */
   fill?: LineFill | null
+  /** For counting in to the next line after an intro or instrumental break. */
+  leadIn?: LeadInTiming | null
   /** When set, clicking a line lets you change its words. */
   onEditLine?: ((lineIndex: number, text: string) => void) | null
   onLineClick: (lineIndex: number) => void
@@ -106,6 +110,11 @@ export function LyricsPane(props: Props) {
     return -1
   })()
 
+  const lead =
+    props.leadIn && synced && nextSung >= 0
+      ? leadInFor(props.leadIn, currentLine, currentLine >= 0 && isSung(lines[currentLine]), nextSung)
+      : null
+
   return (
     <div className="lyrics-wrap">
       <div
@@ -162,6 +171,7 @@ export function LyricsPane(props: Props) {
           return (
             <div key={i}>
               {header}
+              {i === nextSung && lead && props.leadIn && <LeadIn {...lead} now={props.leadIn.now} />}
               <div
                 ref={(el) => {
                   lineRefs.current[i] = el

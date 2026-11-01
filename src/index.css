@@ -1004,6 +1004,52 @@ button.romaji-word.is-fixed {
   text-shadow: none;
 }
 
+/* Count-in before the next line after an intro or instrumental break (see LeadIn.tsx). */
+.lead-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 22px;
+  padding: 0 12px;
+  visibility: hidden;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.lead-in.is-on {
+  visibility: visible;
+}
+
+.lead-in-dots {
+  display: none;
+  gap: 8px;
+}
+
+.lead-in.is-dots .lead-in-dots {
+  display: flex;
+}
+
+.lead-in-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+
+.lead-in-dot.is-lit {
+  background: var(--accent);
+  transform: scale(1.15);
+}
+
+.perf-next .lead-in {
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
 .align-box {
   display: flex;
   flex-direction: column;
