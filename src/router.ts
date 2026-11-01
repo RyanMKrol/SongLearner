@@ -5,6 +5,7 @@
 //   /song/<trackId>  a song
 //   /karaoke         the karaoke set
 //   /playlist/<id>   one of your playlists
+//   /alignments      progress of the karaoke fill's word alignment, for every song
 import { useSyncExternalStore } from 'react'
 import { log } from './log'
 
@@ -13,11 +14,13 @@ export type Route =
   | { name: 'song'; trackId: string }
   | { name: 'karaoke' }
   | { name: 'playlist'; playlistId: string }
+  | { name: 'alignments' }
 
 export function parseRoute(pathname: string): Route {
   const song = /^\/song\/([^/]+)\/?$/.exec(pathname)
   if (song) return { name: 'song', trackId: decodeURIComponent(song[1]) }
   if (/^\/karaoke\/?$/.test(pathname)) return { name: 'karaoke' }
+  if (/^\/alignments\/?$/.test(pathname)) return { name: 'alignments' }
   const playlist = /^\/playlist\/([^/]+)\/?$/.exec(pathname)
   if (playlist) return { name: 'playlist', playlistId: decodeURIComponent(playlist[1]) }
   return { name: 'home' }
@@ -26,6 +29,7 @@ export function parseRoute(pathname: string): Route {
 export function routePath(route: Route): string {
   if (route.name === 'song') return `/song/${encodeURIComponent(route.trackId)}`
   if (route.name === 'karaoke') return '/karaoke'
+  if (route.name === 'alignments') return '/alignments'
   if (route.name === 'playlist') return `/playlist/${encodeURIComponent(route.playlistId)}`
   return '/'
 }

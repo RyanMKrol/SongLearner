@@ -1,3 +1,4 @@
+import { AlignmentsPage } from './components/AlignmentsPage'
 import { useEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
 import { KaraokePage } from './components/Karaoke'
@@ -131,7 +132,14 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     log('app', 'route', { route: routeKey, trackId })
     const name = route.name === 'song' ? (player.track?.id === route.trackId ? player.track.name : null) : null
-    document.title = route.name === 'karaoke' ? 'Karaoke set · SongLearner' : name ? `${name} · SongLearner` : 'SongLearner'
+    document.title =
+      route.name === 'karaoke'
+        ? 'Karaoke set · SongLearner'
+        : route.name === 'alignments'
+          ? 'Word alignment · SongLearner'
+          : name
+            ? `${name} · SongLearner`
+            : 'SongLearner'
     // Only the route and the shown song's name matter for the title.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeKey, player.track?.name])
@@ -145,6 +153,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       <TopBar
         onHome={() => navigate({ name: 'home' })}
         onKaraoke={() => navigate({ name: 'karaoke' })}
+        onAlignments={() => navigate({ name: 'alignments' })}
         onLogout={onLogout}
         onPicked={openSong}
       />
@@ -165,6 +174,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             navigate(back)
           }}
         />
+      ) : route.name === 'alignments' ? (
+        <AlignmentsPage onOpenSong={openSong} />
       ) : route.name === 'playlist' ? (
         <PlaylistPage playlistId={route.playlistId} set={karaoke} />
       ) : route.name === 'song' ? (

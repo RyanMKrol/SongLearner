@@ -1,6 +1,8 @@
 // Asks the dev server's /api/review-readings endpoint (server/readingReview.ts) to have Claude
 // check how the words of a Japanese song are sung.
 import { log, logError } from '../log'
+import type { AiReview } from '../practice/storage'
+import type { ReadingFixes } from './romaji'
 
 export interface ReviewSuggestion {
   source: string
@@ -59,6 +61,16 @@ export async function requestReadingReview(body: ReviewRequestBody, signal?: Abo
     notes: data.notes,
   })
   return { suggestions: data.suggestions ?? [], notes: data.notes ?? '', model: data.model ?? '' }
+}
+
+/**
+ * A song's reading fixes: Claude's applied suggestions first, then your own, which win. Undefined
+ * when there are none. `review` must already be checked to belong to the current lyrics.
+ */
+export function combineReadingFixes(review: AiReview | null, readings: ReadingFixes | undefined): ReadingFixes | undefined {
+  const fromReview = review?.suggestions.filter((s) => s.applied).map((s) => [s.source, s.reading]) ?? []
+  if (fromReview.length === 0) return readings
+  return { ...Object.fromEntries(fromReview), ...readings }
 }
 
 /** Short fingerprint of a lyrics text, so a review is redone if the lyrics change. */

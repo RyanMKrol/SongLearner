@@ -8,6 +8,7 @@ describe('routes', () => {
       { name: 'karaoke' },
       { name: 'song', trackId: '4J2oDU9oacz7lJ7H8A8P8v' },
       { name: 'playlist', playlistId: 'abc123' },
+      { name: 'alignments' },
     ] as const) {
       expect(parseRoute(routePath(route))).toEqual(route)
     }

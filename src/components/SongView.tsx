@@ -14,7 +14,7 @@ import {
 import { appendTapped, lineIndexAt, parseLyrics, toLrc, withLineText } from '../lyrics/lrc'
 import { getLrclibRecord, type LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
-import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
+import { combineReadingFixes, lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
 import { alignmentLines, wordTimesFor, type WordTiming } from '../lyrics/wordAlign'
 import {
   autoSectionStarts,
@@ -136,11 +136,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   // Claude's check of how a Japanese song is sung. Its fixes apply first; your own fixes win.
   const currentLyricsKey = saved ? lyricsKey(saved.text) : null
   const review = prefs.aiReview && prefs.aiReview.lyricsKey === currentLyricsKey ? prefs.aiReview : null
-  const readingFixes = useMemo(() => {
-    const fromReview = review?.suggestions.filter((s) => s.applied).map((s) => [s.source, s.reading]) ?? []
-    if (fromReview.length === 0) return prefs.readings ?? NO_FIXES
-    return { ...Object.fromEntries(fromReview), ...prefs.readings }
-  }, [review, prefs.readings])
+  const readingFixes = useMemo(() => combineReadingFixes(review, prefs.readings) ?? NO_FIXES, [review, prefs.readings])
   const romaji = useRomaji(lines, readingFixes)
 
   const [reviewError, setReviewError] = useState<{ key: string; kind: string; message: string } | null>(null)

@@ -36,6 +36,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   audio file and aligns again. Songs that haven't been aligned highlight whole lines as before.
   New songs are aligned automatically in the background the first time you open them (you can
   turn that off). Songs are aligned one at a time; others wait in a queue and can be cancelled.
+  **Alignments** in the top bar shows every song's progress: what's aligning and queued, what
+  finished or failed (with a step-by-step log for each), and which songs haven't been aligned yet,
+  which you can queue from there with "Align all". The queue survives restarting the dev server.
   Needs a one-off setup (see below).
 - **Edit words** lets you click any line and change its text, for typos or a spelling that's easier
   to sing from (say "o" instead of "wo"). The line keeps its timing. Re-downloading the lyrics

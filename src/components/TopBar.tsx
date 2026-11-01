@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlayer } from '../hooks'
+import { listAlignJobs } from '../lyrics/wordAlign'
 import { useStorageStatus } from '../practice/storage'
 import { playTrack, searchTracks, type SpotifyTrack } from '../spotify/api'
 import { log, logError } from '../log'
@@ -8,11 +9,12 @@ import { playerController } from '../spotify/player'
 interface Props {
   onHome: () => void
   onKaraoke: () => void
+  onAlignments: () => void
   onLogout: () => void
   onPicked: (trackId: string) => void
 }
 
-export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
+export function TopBar({ onHome, onKaraoke, onAlignments, onLogout, onPicked }: Props) {
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} title="Your songs">
@@ -23,6 +25,7 @@ export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
       <button className="btn btn-ghost" onClick={onKaraoke} title="Sing your learned songs from memory">
         🎤 Karaoke set
       </button>
+      <AlignmentsLink onClick={onAlignments} />
       <SaveStatus />
       <button className="btn btn-ghost" onClick={onLogout}>
         Log out
@@ -54,6 +57,34 @@ function NowPlaying({ onOpen }: { onOpen: (trackId: string) => void }) {
         </span>
       </button>
     </div>
+  )
+}
+
+const ALIGN_POLL_MS = 5000
+
+/** Link to the word alignment page, showing how many songs are aligning or queued. */
+function AlignmentsLink({ onClick }: { onClick: () => void }) {
+  const [active, setActive] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      listAlignJobs()
+        .then((jobs) => !cancelled && setActive(jobs.filter((j) => j.state === 'running' || j.state === 'queued').length))
+        .catch(() => {
+          // The page itself reports problems; the link just shows no count.
+        })
+    void load()
+    const id = window.setInterval(() => void load(), ALIGN_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [])
+  return (
+    <button className="btn btn-ghost" onClick={onClick} title="Progress of the karaoke fill's word alignment">
+      Alignments
+      {active > 0 && <span className="align-count">{active}</span>}
+    </button>
   )
 }
 
