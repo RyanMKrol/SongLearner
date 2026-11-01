@@ -144,7 +144,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           <li>Turn on Memorise to fade the words to first letters, then hide them.</li>
           <li>Turn off “Loop sections as you play” and finish with Performance mode for a full run-through.</li>
         </ol>
-        <p className="muted small">
+        <p className="muted small shortcuts">
           Shortcuts: Space play/pause · ←/→ 5 seconds · ↑/↓ previous/next line · L loop the current
           section · Esc stop looping · F performance mode · hold H to peek at hidden words · [ and ]
           nudge lyric timing

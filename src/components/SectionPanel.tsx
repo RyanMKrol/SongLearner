@@ -54,6 +54,8 @@ interface Props {
 export function SectionPanel(props: Props) {
   const { sections, timings, selection, settings, practice } = props
   const [renaming, setRenaming] = useState<number | null>(null)
+  // Touch screens have no Shift-click: this makes the next tap extend the selection instead.
+  const [extending, setExtending] = useState(false)
 
   const sel = selection ?? null
   const selName =
@@ -135,7 +137,10 @@ export function SectionPanel(props: Props) {
             <div
               key={section.startLine}
               className={`section-row ${selected ? 'is-selected' : ''}`}
-              onClick={(e) => props.onSelect(section.index, e.shiftKey)}
+              onClick={(e) => {
+                props.onSelect(section.index, e.shiftKey || extending)
+                setExtending(false)
+              }}
             >
               <span className="section-row-main">
                 {section.repeatGroup ? (
@@ -226,10 +231,19 @@ export function SectionPanel(props: Props) {
           <div className="muted small">
             {selName ? (
               <>
-                Selected: <strong className="text">{selName}</strong>
+                Selected: <strong className="text">{selName}</strong>{' '}
+                <button
+                  className={`btn btn-small touch-only ${extending ? 'is-active' : ''}`}
+                  onClick={() => setExtending((v) => !v)}
+                >
+                  {extending ? 'Now tap the last one' : 'Select more'}
+                </button>
               </>
             ) : (
-              'Click a section to select it. Shift-click another to select a run.'
+              <>
+                <span className="shortcuts">Click a section to select it. Shift-click another to select a run.</span>
+                <span className="touch-only">Tap a section to select it.</span>
+              </>
             )}
           </div>
           {sel && sel.from !== sel.to && (

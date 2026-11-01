@@ -15,6 +15,25 @@ interface Props {
 }
 
 export function TopBar({ onHome, onKaraoke, onAlignments, onLogout, onPicked }: Props) {
+  // On a phone the links fold into a menu; on wider screens the menu box just lays them out inline.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const status = useStorageStatus()
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [menuOpen])
+
+  const pick = (action: () => void) => () => {
+    setMenuOpen(false)
+    action()
+  }
+
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} title="Your songs">
@@ -22,14 +41,26 @@ export function TopBar({ onHome, onKaraoke, onAlignments, onLogout, onPicked }: 
       </button>
       <SearchBox onPicked={onPicked} />
       <NowPlaying onOpen={onPicked} />
-      <button className="btn btn-ghost" onClick={onKaraoke} title="Sing your learned songs from memory">
-        🎤 Karaoke set
-      </button>
-      <AlignmentsLink onClick={onAlignments} />
-      <SaveStatus />
-      <button className="btn btn-ghost" onClick={onLogout}>
-        Log out
-      </button>
+      <div className="topbar-menu-wrap" ref={menuRef}>
+        <button
+          className={`btn btn-ghost topbar-menu-btn ${status === 'error' || status === 'browser-only' ? 'has-warning' : ''}`}
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-expanded={menuOpen}
+          aria-label="Menu"
+        >
+          ☰
+        </button>
+        <div className={`topbar-menu ${menuOpen ? 'is-open' : ''}`}>
+          <button className="btn btn-ghost" onClick={pick(onKaraoke)} title="Sing your learned songs from memory">
+            🎤 Karaoke set
+          </button>
+          <AlignmentsLink onClick={pick(onAlignments)} />
+          <SaveStatus />
+          <button className="btn btn-ghost" onClick={pick(onLogout)}>
+            Log out
+          </button>
+        </div>
+      </div>
     </header>
   )
 }

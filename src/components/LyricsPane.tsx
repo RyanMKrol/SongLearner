@@ -91,6 +91,24 @@ export function LyricsPane(props: Props) {
     scrollToLine(currentLine, true)
   }, [currentLine, synced])
 
+  // Keep the current line in view when the pane changes size, like a phone's practice sheet
+  // opening over it.
+  const currentLineRef = useRef(currentLine)
+  currentLineRef.current = currentLine
+  useEffect(() => {
+    const container = containerRef.current
+    if (!synced || !container) return
+    const observer = new ResizeObserver(() => {
+      if (currentLineRef.current < 0) return
+      if (Date.now() - userScrolledAt.current < FOLLOW_PAUSE_MS) return
+      scrollToLine(currentLineRef.current, false)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+    // scrollToLine only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synced])
+
   const markUserScroll = () => {
     userScrolledAt.current = Date.now()
     if (synced) setFollowing(false)

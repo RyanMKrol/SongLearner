@@ -107,8 +107,12 @@ export function TapSync({
         {!started ? (
           <div className="tapsync-intro">
             <p>
-              The song will restart from the beginning. Press <kbd>Space</kbd> the moment each line
-              starts. Made a mistake? <kbd>Backspace</kbd> undoes the last tap and rewinds a little.
+              The song will restart from the beginning. <span className="shortcuts">Press <kbd>Space</kbd></span>
+              <span className="touch-only">Press Tap</span> the moment each line starts. Made a mistake?{' '}
+              <span className="shortcuts">
+                <kbd>Backspace</kbd>
+              </span>
+              <span className="touch-only">Undo</span> undoes the last tap and rewinds a little.
             </p>
             <button className="btn btn-primary btn-big" onClick={start}>
               Start

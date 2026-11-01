@@ -86,7 +86,11 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   const [selection, setSelection] = useState<{ from: number; to: number } | null>(null)
   const [editSplits, setEditSplits] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
-  const peek = useKeyHeld('h')
+  // On a phone the side panel is a bottom sheet: closed it shows just the transport.
+  const [sheetOpen, setSheetOpen] = useState(false)
+  // Held H on a keyboard, or the hold-to-peek button on a touch screen.
+  const [touchPeek, setTouchPeek] = useState(false)
+  const peek = useKeyHeld('h') || touchPeek
   // Remembered per song for this browser tab, so a refresh (or any rebuild of this screen)
   // doesn't drop you out of a test halfway through.
   const testModeKey = `songlearner:test-mode:${track.id}`
@@ -967,10 +971,20 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
                   <strong>Test mode</strong> · {learnedCount} of {sections.length} sections learned
                   <div className="muted small">
                     Sing without the words. A section is marked learned when it plays from start to end
-                    without pausing, skipping or peeking (hold H to peek).
+                    without pausing, skipping or peeking<span className="shortcuts"> (hold H to peek)</span>.
                   </div>
                 </div>
                 <div className="test-banner-actions">
+                  <button
+                    className="btn btn-small touch-only peek-btn"
+                    onPointerDown={() => setTouchPeek(true)}
+                    onPointerUp={() => setTouchPeek(false)}
+                    onPointerCancel={() => setTouchPeek(false)}
+                    onPointerLeave={() => setTouchPeek(false)}
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    Hold to peek
+                  </button>
                   {firstUnlearned >= 0 ? (
                     <button className="btn btn-primary btn-small" onClick={() => startSection(firstUnlearned)}>
                       Start from first unlearned
@@ -987,7 +1001,8 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
             {calibration && (
               <div className="banner banner-inline calibrate-banner">
                 <div>
-                  <strong>Calibrating timing:</strong> tap Space as each word starts, for a line or two.{' '}
+                  <strong>Calibrating timing:</strong> tap <span className="shortcuts">Space</span>
+                  <span className="touch-only">the Tap button</span> as each word starts, for a line or two.{' '}
                   <span className="muted">
                     {calibration.positions.length} {calibration.positions.length === 1 ? 'tap' : 'taps'}
                   </span>
@@ -1126,7 +1141,20 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
         )}
       </section>
 
-      <aside className="song-side">
+      <aside className={`song-side ${sheetOpen ? 'is-open' : ''}`}>
+        <button
+          className="sheet-handle"
+          onClick={() => setSheetOpen((v) => !v)}
+          aria-expanded={sheetOpen}
+        >
+          <span className="sheet-grip" aria-hidden="true" />
+          <span>{sheetOpen ? 'Hide practice tools' : 'Practice tools'}</span>
+          {synced && sections.length > 0 && (
+            <span className="muted small">
+              {learnedCount}/{sections.length} learned
+            </span>
+          )}
+        </button>
         <div className="track-card">
           {track.imageUrl ? <img src={track.imageUrl} alt="" /> : <span className="art-placeholder" />}
           <div>

@@ -35,8 +35,15 @@ body,
   height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--bg);
+  /* No double-tap zoom delay on phones, and no grey flash on every tap. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
@@ -191,17 +198,20 @@ kbd {
 
 /* App shell */
 
+/* The page runs edge to edge on phones (viewport-fit=cover), so keep clear of the notch, the
+   rounded corners and the home indicator. The insets are 0 everywhere else. */
 .app {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 20px;
+  padding: max(10px, env(safe-area-inset-top)) 20px 10px;
   border-bottom: 1px solid var(--border);
   background: rgba(14, 14, 19, 0.92);
   flex-shrink: 0;
@@ -1996,7 +2006,8 @@ input[type='range'] {
   display: grid;
   place-items: center;
   z-index: 50;
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 
 .modal {
@@ -2180,7 +2191,7 @@ input[type='range'] {
   justify-content: center;
   align-items: center;
   gap: 2.4vh;
-  padding: 0 6vw;
+  padding: 0 calc(6vw + env(safe-area-inset-right)) 0 calc(6vw + env(safe-area-inset-left));
   text-align: center;
 }
 
@@ -2220,7 +2231,8 @@ input[type='range'] {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 24px;
+  padding: 14px calc(24px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom))
+    calc(24px + env(safe-area-inset-left));
 }
 
 .perf-progress {
@@ -2236,26 +2248,412 @@ input[type='range'] {
   background: var(--accent);
 }
 
-/* Narrow screens: stack the sidebar under the lyrics. */
+/* The top bar menu and the song page's bottom sheet only exist on narrow screens. Wider, the
+   menu box lays its links out inline in the bar and the sheet handle is hidden. */
+.topbar-menu-wrap,
+.topbar-menu {
+  display: contents;
+}
+
+.topbar-menu-btn,
+.sheet-handle {
+  display: none;
+}
+
+/* Narrow screens (tablets, phones): the song page's sidebar becomes a bottom sheet over the
+   lyrics. Closed, it shows just the transport; the handle opens the rest. */
 @media (max-width: 900px) {
   .song {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(50vh, 1fr) auto;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .song-lyrics {
+    flex: 1;
   }
 
   .song-side {
+    flex-shrink: 0;
+    max-height: 82%;
     border-left: none;
     border-top: 1px solid var(--border);
-    overflow: visible;
+    border-radius: 18px 18px 0 0;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    gap: 10px;
+    box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.45);
+    overscroll-behavior: contain;
+  }
+
+  .song-side:not(.is-open) {
+    overflow: hidden;
+  }
+
+  .song-side:not(.is-open) > :not(.sheet-handle, .transport),
+  .song-side:not(.is-open) .volume {
+    display: none;
+  }
+
+  .sheet-handle {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 -12px;
+    padding: 18px 16px 6px;
+    border: none;
+    background: #111118;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sheet-handle .muted {
+    margin-left: auto;
+  }
+
+  .sheet-grip {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    width: 38px;
+    height: 4px;
+    margin-left: -19px;
+    border-radius: 2px;
+    background: var(--border);
   }
 
   .lyrics {
     padding: 0 12px;
+    overflow-x: hidden;
   }
 
+  /* Room for the first and last lines to sit where the current line is kept (40% down). */
+  .lyrics-pad {
+    height: 40%;
+  }
+
+  /* One scroll area is enough inside the sheet. */
+  .section-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .karaoke-banner,
+  .test-banner {
+    margin: 10px 12px 0;
+  }
+
+  .banner-inline {
+    margin: 10px 12px 0;
+  }
+}
+
+/* Phones, upright or sideways: the top bar's links fold into a menu. */
+@media (max-width: 700px), (max-height: 500px) {
+  .topbar-menu-wrap {
+    display: block;
+    position: relative;
+  }
+
+  .topbar-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 1.25rem;
+    position: relative;
+  }
+
+  .topbar-menu-btn.has-warning::after {
+    content: '';
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--warn);
+  }
+
+  .topbar-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 40;
+    min-width: 230px;
+    flex-direction: column;
+    padding: 6px;
+    background: var(--panel);
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 16px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  .topbar-menu.is-open {
+    display: flex;
+  }
+
+  .topbar-menu .btn {
+    text-align: left;
+    padding: 12px;
+    font-size: 1rem;
+  }
+
+  .topbar-menu .save-status {
+    order: 1;
+    padding: 10px 12px 6px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+}
+
+/* Phones. */
+@media (max-width: 700px) {
   .topbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand now menu'
+      'search search search';
+    align-items: center;
+    gap: 8px 10px;
+    padding: max(8px, env(safe-area-inset-top)) 16px 10px;
+  }
+
+  .brand {
+    grid-area: brand;
+    font-size: 1.3rem;
+  }
+
+  .search {
+    grid-area: search;
+    max-width: none;
+    margin: 0;
+  }
+
+  .now-playing {
+    grid-area: now;
+    justify-self: end;
+    max-width: 100%;
+  }
+
+  .topbar-menu-wrap {
+    grid-area: menu;
+  }
+
+  /* The top bar already shows the song. */
+  .song-side .track-card {
+    display: none;
+  }
+
+  .home {
+    padding: 20px 16px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .home-hero h2 {
+    font-size: 1.55rem;
+  }
+
+  .section-title {
+    margin-top: 28px;
+  }
+
+  .library,
+  .playlists {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .banner {
     padding: 10px 16px;
+  }
+
+  /* Playlist rows: name and progress stacked beside the cover, reorder buttons on the right. */
+  .playlist-row {
+    display: grid;
+    grid-template-columns: auto 48px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'index art text actions'
+      'index art progress actions';
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 10px 6px 10px 10px;
+  }
+
+  .playlist-row .playlist-index {
+    grid-area: index;
+    width: auto;
+  }
+
+  .playlist-row > img,
+  .playlist-row > .art-placeholder {
+    grid-area: art;
+  }
+
+  .playlist-row .karaoke-result-text {
+    grid-area: text;
+    align-self: end;
+  }
+
+  .playlist-row .library-progress {
+    grid-area: progress;
+    align-self: start;
+  }
+
+  .playlist-row .playlist-row-actions {
+    grid-area: actions;
+    gap: 0;
+  }
+
+  .playlist-row .playlist-row-actions .btn {
+    padding: 8px 7px;
+  }
+
+  /* Karaoke rows: notes and buttons that don't fit beside the song drop to a line underneath. */
+  .karaoke-result:not(.playlist-row) {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .karaoke-result:not(.playlist-row) .karaoke-result-text {
+    flex: 1 1 140px;
+  }
+
+  .karaoke-result:not(.playlist-row) > :is(.muted, .btn) {
+    margin-left: 62px;
+  }
+
+  .karaoke-result-text strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .align-row {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+
+  .align-row-main {
+    flex: 1 1 100%;
+  }
+
+  .karaoke-banner,
+  .test-banner,
+  .calibrate-banner,
+  .edit-words-banner {
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px;
+  }
+
+  .test-banner-actions,
+  .calibrate-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Long section names push the header's buttons onto their own line instead of squashing them. */
+  .section-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .section-header-name {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .section-header .btn {
+    white-space: nowrap;
+  }
+
+  .overlay {
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .modal {
+    max-height: 100%;
+    padding: 16px;
+  }
+
+  .tapsync {
+    padding: 16px;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  .tapsync-current {
+    font-size: 1.5rem;
+  }
+
+  .tapsync-actions .btn-big {
+    flex: 1;
+    padding: 18px;
+  }
+
+  .performance-lines {
+    padding: 0 20px;
+    gap: 2vh;
+  }
+
+  .performance-footer {
+    padding: 12px 16px;
+  }
+}
+
+/* iOS Safari zooms the page into any text field under 16px. */
+@media (max-width: 700px), (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  .search-input,
+  .rename-input,
+  .line-edit-input,
+  .paste-area,
+  .inline-field select,
+  .end-notice select {
+    font-size: 16px;
+  }
+}
+
+/* Stand-ins for keyboard shortcuts, for touch screens only. */
+.touch-only {
+  display: none;
+}
+
+/* Touch screens have no hover, so controls that wait for one are always shown, and the keyboard
+   shortcut hints are left out. */
+@media (hover: none) {
+  .library-remove,
+  .library-add {
+    opacity: 1;
+  }
+
+  .touch-only {
+    display: revert;
+  }
+
+  .peek-btn {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .calibrate-tap {
+    flex-basis: 100%;
+    padding: 14px;
+    font-size: 1.05rem;
+  }
+
+  .shortcuts {
+    display: none;
   }
 }

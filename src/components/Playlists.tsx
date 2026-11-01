@@ -211,7 +211,7 @@ export function PlaylistPage({ playlistId, set }: { playlistId: string; set: Son
             return (
               <div
                 key={song.id}
-                className="karaoke-result is-clickable"
+                className="karaoke-result playlist-row is-clickable"
                 title="Open this song"
                 onClick={() => {
                   log('playlists', 'open song', { id: playlist.id, trackId: song.id })
