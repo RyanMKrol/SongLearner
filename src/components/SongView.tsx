@@ -15,6 +15,7 @@ import { appendTapped, lineIndexAt, parseLyrics, toLrc, withLineText } from '../
 import { getLrclibRecord, type LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
 import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
+import { alignmentLines, wordTimesFor, type WordTiming } from '../lyrics/wordAlign'
 import {
   autoSectionStarts,
   buildSections,
@@ -33,13 +34,14 @@ import { log, logDebug } from '../log'
 import { rememberPosition } from '../playback/positions'
 import { playerController, type PlayerTrack } from '../spotify/player'
 import { EndOfLyrics } from './EndOfLyrics'
-import { LyricsPane } from './LyricsPane'
+import { LyricsPane, type LineFill } from './LyricsPane'
 import { PasteDialog, ReadingDialog, VersionsDialog } from './LyricsDialogs'
 import { PerformanceView } from './PerformanceView'
 import { DEFAULT_PRACTICE_SETTINGS, type PracticeSettings } from '../practice/settings'
 import { SectionPanel } from './SectionPanel'
 import { TapSync } from './TapSync'
 import { TimingControl, Transport } from './Transport'
+import { WordAlignPanel } from './WordAlignPanel'
 
 type Overlay = null | 'tapsync' | 'performance' | 'paste' | 'versions'
 
@@ -52,6 +54,7 @@ const resetLineKeyedPrefs = (p: TrackPrefs): TrackPrefs => ({
   sectionNames: {},
   mastery: {},
   hide: {},
+  wordTiming: undefined,
 })
 
 /** A song being played as part of a set: a playlist or the karaoke set (see karaoke.ts). */
@@ -347,6 +350,23 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     }
   }, [reviewPending, currentLyricsKey, romaji.lines, reviewWords, runReview])
   const romajiLines = romajiMode === 'off' ? null : romaji.lines
+
+  // Karaoke fill: word timings worked out from the song's audio (see WordAlignPanel).
+  const [fillOn, setFillOn] = useLocalSetting<boolean>('karaokeFill', true)
+  const [autoAlign, setAutoAlign] = useLocalSetting<boolean>('autoAlign', true)
+  const wordTiming = prefs.wordTiming
+  const lyricNow = useCallback(() => playerController.clock.position() + offset, [offset])
+  const fill = useMemo<LineFill | null>(
+    () =>
+      wordTiming && fillOn
+        ? { words: (lineIndex, shown) => wordTimesFor(wordTiming, lineIndex, shown), now: lyricNow }
+        : null,
+    [wordTiming, fillOn, lyricNow],
+  )
+  // Japanese lines are aligned by their romaji, so wait for it.
+  const alignReady = synced && lines.some(isSung) && (!romaji.available || romaji.lines !== null)
+  const buildAlignLines = useCallback(() => alignmentLines(lines, romaji.lines), [lines, romaji.lines])
+  const saveWordTiming = useCallback((t: WordTiming) => updatePrefs((p) => ({ ...p, wordTiming: t })), [updatePrefs])
   /** Sections as shown: unnamed sections take their label from the romaji when there is some. */
   const displaySections = useMemo(
     () =>
@@ -975,6 +995,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               editSplits={editSplits}
               onToggleSplit={toggleSplit}
               onEditLine={editWords && !testMode && !outro ? editLine : null}
+              fill={fill}
               onLineClick={seekToLine}
               onSectionClick={selectSection}
               onSectionLoop={(i) => loop(i, i)}
@@ -1143,6 +1164,23 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               )}
             </div>
           )}
+          {saved && (
+            <WordAlignPanel
+              trackId={track.id}
+              artist={track.artists[0] ?? ''}
+              title={track.name}
+              durationMs={track.durationMs}
+              ready={alignReady}
+              notReadyReason={synced ? 'Waiting for the romaji…' : 'The lyrics need to be timed first.'}
+              buildLines={buildAlignLines}
+              timing={wordTiming}
+              onTiming={saveWordTiming}
+              fillOn={fillOn}
+              onFillOn={setFillOn}
+              autoAlign={autoAlign}
+              onAutoAlign={setAutoAlign}
+            />
+          )}
           {romaji.available && romajiMode !== 'off' && (
             <div className="review-box">
               {reviewPending && (
@@ -1282,6 +1320,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
         <PerformanceView
           romaji={romajiLines}
           romajiMode={romajiMode}
+          fill={fill}
           lines={lines}
           offsetMs={offset}
           durationMs={track.durationMs}

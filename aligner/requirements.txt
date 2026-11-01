@@ -1,0 +1,10 @@
+# Word alignment (see align.py). Installed into aligner/.venv by `npm run aligner:setup`.
+# torchaudio 2.9 dropped forced_align and audio I/O, which this and Demucs rely on.
+torch==2.8.0
+torchaudio==2.8.0
+demucs==4.0.1
+numpy<3
+# [default] adds yt-dlp-ejs, the scripts that unlock YouTube download links (they also need Deno: brew install deno).
+yt-dlp[default]
+# python.org builds of Python ship without CA certificates; yt-dlp and model downloads use these.
+certifi

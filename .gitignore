@@ -31,3 +31,7 @@ logs/
 
 # Your songs, edits and progress (server/diskStore.ts). Not committed: personal data.
 data/
+
+# The word aligner's Python environment (npm run aligner:setup)
+aligner/.venv/
+__pycache__/

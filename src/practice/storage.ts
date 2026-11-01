@@ -1,6 +1,7 @@
 // Everything the app remembers lives in localStorage, keyed by Spotify track ID.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { changedKeys, log, logDebug, logWarn } from '../log'
+import type { WordTiming } from '../lyrics/wordAlign'
 import type { HideLevel } from './mask'
 
 /** 0 = not started, 1 = learning, 2 = almost, 3 = know it. */
@@ -25,6 +26,8 @@ export interface TrackPrefs {
   progress?: SongProgress
   /** Results of karaoke sets this song was part of, oldest first. */
   rehearsals?: Rehearsal[]
+  /** When each word is sung, for the karaoke fill (see lyrics/wordAlign.ts). */
+  wordTiming?: WordTiming
 }
 
 export interface SongProgress {

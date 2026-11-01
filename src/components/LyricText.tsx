@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react'
 import type { RomajiMode } from '../hooks'
+import type { WordTime } from '../lyrics/wordAlign'
 import { hasJapanese, type RomajiLine, type RomajiWord } from '../lyrics/romaji'
 import { maskText, type Mask } from '../practice/mask'
 
@@ -16,6 +18,54 @@ export function LyricText({ text, level, peek }: { text: string; level: Mask; pe
           <span key={i}>{segment.text}</span>
         ),
       )}
+    </>
+  )
+}
+
+/** Word timings for the line being sung, and the current lyric time, for the karaoke fill. */
+export interface FillProps {
+  /** Times for the words of the text as shown, or null if there aren't any that fit. */
+  words: (shownText: string) => WordTime[] | null
+  now: () => number
+}
+
+/** A line whose words fill in from left to right as they're sung. */
+function KaraokeText({ text, words, now }: { text: string; words: WordTime[]; now: () => number }) {
+  const refs = useRef<(HTMLSpanElement | null)[]>([])
+  useEffect(() => {
+    let frame = 0
+    const paint = () => {
+      const t = now()
+      words.forEach((w, i) => {
+        const el = refs.current[i]
+        if (!el) return
+        const share = w.endMs > w.startMs ? (t - w.startMs) / (w.endMs - w.startMs) : t >= w.startMs ? 1 : 0
+        el.style.setProperty('--fill', `${Math.round(Math.min(1, Math.max(0, share)) * 1000) / 10}%`)
+      })
+      frame = requestAnimationFrame(paint)
+    }
+    paint()
+    return () => cancelAnimationFrame(frame)
+  }, [words, now])
+
+  let k = 0
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, i) => {
+        if (!part.trim()) return part
+        const index = k++
+        return (
+          <span
+            key={i}
+            className="karaoke-word"
+            ref={(el) => {
+              refs.current[index] = el
+            }}
+          >
+            {part}
+          </span>
+        )
+      })}
     </>
   )
 }
@@ -145,6 +195,7 @@ export function LyricWithRomaji({
   fixMode = false,
   onWordClick,
   onChooseReading,
+  fill,
 }: {
   text: string
   romaji: RomajiLine | null | undefined
@@ -154,9 +205,16 @@ export function LyricWithRomaji({
   fixMode?: boolean
   onWordClick?: (word: RomajiWord) => void
   onChooseReading?: (word: RomajiWord, reading: string | null) => void
+  /** Set on the line being sung when its word timings are known. */
+  fill?: FillProps | null
 }) {
-  if (!romaji || mode === 'off') return <LyricText text={text} level={level} peek={peek} />
-  const words = (
+  const withRomaji = romaji && mode !== 'off'
+  const shown = withRomaji ? romaji.text : text
+  // Hidden words stay hidden; the fill only runs over words you can see.
+  const fillWords = fill && (level === 0 || peek) && !fixMode ? fill.words(shown) : null
+  const filled = fill && fillWords ? <KaraokeText text={shown} words={fillWords} now={fill.now} /> : null
+  if (!withRomaji) return filled ?? <LyricText text={text} level={level} peek={peek} />
+  const words = filled ?? (
     <RomajiWords
       line={romaji}
       level={level}

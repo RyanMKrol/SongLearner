@@ -30,6 +30,13 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - If LRCLIB only has untimed lyrics, or nothing at all, you can paste lyrics in and time them
   yourself by tapping Space at the start of each line while the song plays.
 - A timing slider fixes lyrics that run slightly early or late.
+- **Karaoke fill** (optional) fills in each word of the current line as it's sung. Click "Align
+  words to the music" and the app finds the song on YouTube, separates the vocals and works out
+  when each word starts. If it picked the wrong version, "Change audio" takes a YouTube link or an
+  audio file and aligns again. Songs that haven't been aligned highlight whole lines as before.
+  New songs are aligned automatically in the background the first time you open them (you can
+  turn that off). Songs are aligned one at a time; others wait in a queue and can be cancelled.
+  Needs a one-off setup (see below).
 - **Edit words** lets you click any line and change its text, for typos or a spelling that's easier
   to sing from (say "o" instead of "wo"). The line keeps its timing. Re-downloading the lyrics
   throws your edits away.
@@ -113,6 +120,20 @@ The key stays on the dev server (`server/readingReview.ts`) and is never sent to
 Each check is one Claude Opus 5.5 request with a few web searches, run once per Japanese song.
 If Claude declines a request, the API retries it on a fallback model automatically.
 
+Optional: the karaoke fill needs Python 3.10 to 3.13, ffmpeg and Deno (`brew install ffmpeg deno`;
+yt-dlp needs Deno to download from YouTube). Install its Python side once, then restart the dev
+server:
+
+```
+npm run aligner:setup
+```
+
+This puts PyTorch, [Demucs](https://github.com/facebookresearch/demucs) (vocal separation) and
+yt-dlp in `aligner/.venv`. The first alignment ever also downloads about 1.3GB of models into
+`~/.cache/torch`, which are kept and reused. After that a song takes about two minutes, or under
+a minute to align again. Spotify's stream is encrypted, so the audio comes from YouTube or a file
+you upload. Downloading from YouTube is against its terms, so use it for personal practice only.
+
 A development-mode Spotify app allows up to 5 users. To let a friend use it, add their Spotify
 email under User Management in the dashboard.
 
@@ -131,6 +152,11 @@ The code is split by concern:
 - `src/lyrics/`: the LRC parser, the LRCLIB client, section detection, and romaji.
 - `server/readingReview.ts`: the dev-server endpoint that asks Claude to check Japanese readings.
 - `server/diskStore.ts`: the dev-server endpoint that saves your data under `data/`.
+- `server/wordAlign.ts` and `aligner/align.py`: the karaoke fill. The server runs the Python
+  script, which downloads the audio, separates the vocals, lines the audio up with Spotify's
+  version and then places each word with the
+  [MMS forced aligner](https://pytorch.org/audio/2.8/tutorials/ctc_forced_alignment_api_tutorial.html),
+  searching only inside each line's time window.
 - `server/logSink.ts`: the dev-server endpoint that writes diagnostic logs under `logs/`.
 - `scripts/copy-kuromoji-dict.mjs`: copies the Japanese dictionary into `public/` before
   `dev` and `build` (it isn't committed).
@@ -148,6 +174,8 @@ The dev server keeps everything in plain JSON files under `data/` (not committed
 - `data/playlists.json`: your playlists
 - `data/songs/<trackId>.json`: one file per song, with its lyrics (including lines you've added)
   and your progress, sections and reading fixes
+- `data/audio/`: audio for songs you've aligned for the karaoke fill, with the separated vocals
+  and the result of the last alignment. Deleted along with the song.
 - `data/backups/`: before a file is overwritten or deleted, a timestamped copy is kept here (at
   most one an hour per file)
 

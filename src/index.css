@@ -989,6 +989,51 @@ button.romaji-word.is-fixed {
   gap: 6px;
 }
 
+/* Karaoke fill: each word fills from left to right as it's sung (--fill is set every frame). */
+.karaoke-word {
+  --fill: 0%;
+  background: linear-gradient(90deg, var(--accent) var(--fill), currentColor var(--fill));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.line.is-current .karaoke-word,
+.perf-current .karaoke-word {
+  /* The glow would show through the see-through letters. */
+  text-shadow: none;
+}
+
+.align-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.align-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.align-change {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.align-link-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
 .review-box {
   display: flex;
   flex-direction: column;

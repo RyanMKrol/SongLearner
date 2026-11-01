@@ -5,6 +5,7 @@ import type { Mask } from '../practice/mask'
 import type { Mastery } from '../practice/storage'
 import type { RomajiMode } from '../hooks'
 import type { RomajiLine, RomajiWord } from '../lyrics/romaji'
+import type { WordTime } from '../lyrics/wordAlign'
 import { LyricWithRomaji } from './LyricText'
 
 interface Props {
@@ -28,6 +29,8 @@ interface Props {
   mastery: (section: Section) => Mastery
   editSplits: boolean
   onToggleSplit: (lineIndex: number) => void
+  /** Karaoke fill for the line being sung, when word timings are known. */
+  fill?: LineFill | null
   /** When set, clicking a line lets you change its words. */
   onEditLine?: ((lineIndex: number, text: string) => void) | null
   onLineClick: (lineIndex: number) => void
@@ -39,6 +42,13 @@ interface Props {
   endNotice?: ReactNode
   /** When set, clicking lines picks a range (for adding an ending) instead of seeking. */
   pickLines?: { from: number | null; to: number | null; onPick: (lineIndex: number, extend: boolean) => void } | null
+}
+
+export interface LineFill {
+  /** Word times for a line as shown, or null when there aren't any that fit. */
+  words: (lineIndex: number, shownText: string) => WordTime[] | null
+  /** Where the lyrics are now, in lyric time. */
+  now: () => number
 }
 
 export interface TestModeProps {
@@ -194,6 +204,11 @@ export function LyricsPane(props: Props) {
                     peek={props.peek}
                     fixMode={props.fixReadings}
                     onWordClick={props.onWordClick}
+                    fill={
+                      props.fill && synced && i === currentLine
+                        ? { words: (shown) => props.fill?.words(i, shown) ?? null, now: props.fill.now }
+                        : null
+                    }
                     // Hover menus would give the words away in test mode.
                     onChooseReading={test ? undefined : props.onChooseReading}
                   />

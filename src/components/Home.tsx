@@ -3,6 +3,7 @@ import { usePlayer } from '../hooks'
 import { getPlaybackState, playTrack, transferPlayback } from '../spotify/api'
 import { PlaylistMenu, PlaylistsSection } from './Playlists'
 import { log, logError } from '../log'
+import { forgetAudio } from '../lyrics/wordAlign'
 import { playerController } from '../spotify/player'
 import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, usePlaylists, type LibraryEntry } from '../practice/storage'
 
@@ -37,6 +38,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
   const remove = (entry: LibraryEntry) => {
     log('home', 'delete song', { trackId: entry.id })
     deleteSong(entry.id)
+    forgetAudio(entry.id)
     setLibrary(loadLibrary())
   }
 

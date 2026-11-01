@@ -6,6 +6,7 @@ import { isSung } from '../lyrics/sections'
 import type { Mask } from '../practice/mask'
 import { playerController } from '../spotify/player'
 import { LyricWithRomaji } from './LyricText'
+import type { LineFill } from './LyricsPane'
 
 /** Full-screen, distraction-free view for singing the whole song through. */
 export function PerformanceView({
@@ -16,6 +17,7 @@ export function PerformanceView({
   peek,
   romaji,
   romajiMode,
+  fill,
   onClose,
 }: {
   lines: LyricLine[]
@@ -25,6 +27,7 @@ export function PerformanceView({
   peek: boolean
   romaji: (RomajiLine | null)[] | null
   romajiMode: RomajiMode
+  fill?: LineFill | null
   onClose: () => void
 }) {
   const player = usePlayer()
@@ -45,7 +48,14 @@ export function PerformanceView({
   }, [onClose])
 
   const show = (i: number) => (
-    <LyricWithRomaji text={lines[i].text} romaji={romaji?.[i]} mode={romajiMode} level={hideFor(i)} peek={peek} />
+    <LyricWithRomaji
+      text={lines[i].text}
+      romaji={romaji?.[i]}
+      mode={romajiMode}
+      level={hideFor(i)}
+      peek={peek}
+      fill={fill && i === current ? { words: (shown) => fill.words(i, shown), now: fill.now } : null}
+    />
   )
 
   const sungAfter = (from: number, count: number) => {
