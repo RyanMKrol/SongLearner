@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 5173,
       strictPort: true,
+      // Lets other devices on the tailnet use the app through `tailscale serve`, which proxies HTTPS to this port.
+      allowedHosts: ['.ts.net'],
       watch: { ignored: ['**/logs/**', '**/data/**', '**/aligner/**'] },
     },
     preview: { host: '127.0.0.1', port: 5173, strictPort: true },
