@@ -28,6 +28,8 @@ interface Props {
   mastery: (section: Section) => Mastery
   editSplits: boolean
   onToggleSplit: (lineIndex: number) => void
+  /** When set, clicking a line lets you change its words. */
+  onEditLine?: ((lineIndex: number, text: string) => void) | null
   onLineClick: (lineIndex: number) => void
   onSectionClick: (sectionIndex: number, extend: boolean) => void
   onSectionLoop: (sectionIndex: number) => void
@@ -56,6 +58,9 @@ export function LyricsPane(props: Props) {
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const userScrolledAt = useRef(0)
   const [following, setFollowing] = useState(true)
+  const [editingLine, setEditingLine] = useState<number | null>(null)
+  const onEditLine = props.onEditLine ?? null
+  if (!onEditLine && editingLine !== null) setEditingLine(null)
 
   const scrollToLine = (index: number, smooth: boolean) => {
     const container = containerRef.current
@@ -98,6 +103,7 @@ export function LyricsPane(props: Props) {
           'lyrics',
           synced ? 'is-synced' : 'is-plain',
           editSplits ? 'is-editing' : '',
+          onEditLine ? 'is-editing-words' : '',
           test ? 'is-test' : '',
           test && props.peek ? 'is-peeking' : '',
         ].join(' ')}
@@ -154,6 +160,8 @@ export function LyricsPane(props: Props) {
                 onClick={(e) => {
                   if (props.pickLines) {
                     props.pickLines.onPick(i, e.shiftKey)
+                  } else if (onEditLine) {
+                    if (sung) setEditingLine(i)
                   } else if (editSplits) {
                     if (sung) props.onToggleSplit(i)
                   } else if (synced && line.timeMs !== null) {
@@ -167,7 +175,16 @@ export function LyricsPane(props: Props) {
                     {section ? '✂ starts here' : '✂'}
                   </span>
                 )}
-                {sung ? (
+                {sung && onEditLine && editingLine === i ? (
+                  <LineEditor
+                    initial={line.text}
+                    onSave={(text) => {
+                      onEditLine(i, text)
+                      setEditingLine(null)
+                    }}
+                    onCancel={() => setEditingLine(null)}
+                  />
+                ) : sung ? (
                   <span className="line-text">
                   <LyricWithRomaji
                     text={line.text}
@@ -204,6 +221,34 @@ export function LyricsPane(props: Props) {
         </button>
       )}
     </div>
+  )
+}
+
+/** Text box for changing a line's words. Enter or clicking away saves, Escape cancels, and so does emptying it. */
+function LineEditor({ initial, onSave, onCancel }: { initial: string; onSave: (text: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(initial)
+  const done = useRef(false)
+  const finish = (save: boolean) => {
+    if (done.current) return
+    done.current = true
+    if (save && value.trim() && value.trim() !== initial) onSave(value)
+    else onCancel()
+  }
+  return (
+    <input
+      className="line-edit-input"
+      value={value}
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') finish(true)
+        else if (e.key === 'Escape') finish(false)
+      }}
+      aria-label="Words for this line"
+    />
   )
 }
 

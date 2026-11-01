@@ -110,6 +110,29 @@ export function toLrc(lines: { timeMs: number; text: string; stanzaBreakBefore: 
   return out.join('\n')
 }
 
+/** Serialises lines back to text: LRC if they're all timed, plain lyrics otherwise. */
+export function serialiseLyrics(lines: LyricLine[]): string {
+  if (lines.length > 0 && lines.every((l) => l.timeMs !== null)) {
+    return toLrc(lines as (LyricLine & { timeMs: number })[])
+  }
+  const out: string[] = []
+  lines.forEach((line, i) => {
+    if (i > 0 && line.stanzaBreakBefore) out.push('')
+    out.push(line.text)
+  })
+  return out.join('\n')
+}
+
+/**
+ * The lyrics with one line's words changed, keeping its timing and every other line as it was.
+ * Returns null if the new words are empty, since an empty line would turn into an instrumental gap.
+ */
+export function withLineText(lines: LyricLine[], index: number, text: string): string | null {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (!clean || !lines[index]) return null
+  return serialiseLyrics(lines.map((l, i) => (i === index ? { ...l, text: clean } : l)))
+}
+
 /** Index of the line being sung at `timeMs`, or -1 before the first line. */
 export function lineIndexAt(lines: LyricLine[], timeMs: number): number {
   let lo = 0

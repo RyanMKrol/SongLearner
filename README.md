@@ -24,6 +24,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - If LRCLIB only has untimed lyrics, or nothing at all, you can paste lyrics in and time them
   yourself by tapping Space at the start of each line while the song plays.
 - A timing slider fixes lyrics that run slightly early or late.
+- **Edit words** lets you click any line and change its text, for typos or a spelling that's easier
+  to sing from (say "o" instead of "wo"). The line keeps its timing. Re-downloading the lyrics
+  throws your edits away.
 - Japanese lyrics get romaji, either under each line or instead of it, so you can sing songs
   without reading kanji. It works out readings with [kuromoji](https://github.com/sglkc/kuromoji.js)
   and spells them out with [wanakana](https://wanakana.com). The dictionary (about 17MB) only

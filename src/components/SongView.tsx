@@ -10,7 +10,7 @@ import {
   useRomaji,
   type RomajiMode,
 } from '../hooks'
-import { appendTapped, lineIndexAt, parseLyrics, toLrc } from '../lyrics/lrc'
+import { appendTapped, lineIndexAt, parseLyrics, toLrc, withLineText } from '../lyrics/lrc'
 import { getLrclibRecord, type LrclibRecord } from '../lyrics/lrclib'
 import { hasJapanese, type RomajiWord } from '../lyrics/romaji'
 import { lyricsKey, requestReadingReview, ReviewError } from '../lyrics/readingReview'
@@ -103,6 +103,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   const [romajiMode, setRomajiMode] = useLocalSetting<RomajiMode>('romaji', 'below')
   const [fixReadings, setFixReadings] = useState(false)
   const [fixingWord, setFixingWord] = useState<RomajiWord | null>(null)
+  const [editWords, setEditWords] = useState(false)
   const offset = prefs.offsetMs
 
   useEffect(() => {
@@ -283,6 +284,21 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     updatePrefs((p) => ({
       ...p,
       sectionStarts: p.sectionStarts?.filter((i) => i < (keepLines ?? 0)),
+      aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: newKey } : p.aiReview,
+    }))
+  }
+
+  /** Changes the words of one line, keeping its timing. */
+  const editLine = (lineIndex: number, text: string) => {
+    if (!saved) return
+    const next = withLineText(lines, lineIndex, text)
+    if (next === null || next === saved.text) return
+    log('lyrics', 'line edited', { line: lineIndex })
+    replace({ ...saved, text: next, edited: true })
+    const newKey = lyricsKey(next)
+    updatePrefs((p) => ({
+      ...p,
+      // A small wording change doesn't undo Claude's check of the readings.
       aiReview: p.aiReview && p.aiReview.lyricsKey === currentLyricsKey ? { ...p.aiReview, lyricsKey: newKey } : p.aiReview,
     }))
   }
@@ -629,6 +645,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
           if (overlay === 'performance') setOverlay(null)
           else if (practice.status) stopPractice()
           else if (editSplits) setEditSplits(false)
+          else if (editWords) setEditWords(false)
           break
         case 't':
         case 'T':
@@ -661,6 +678,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     practice.status,
     stopPractice,
     editSplits,
+    editWords,
     setOffset,
     offset,
   ])
@@ -808,6 +826,16 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
                 </div>
               </div>
             )}
+            {editWords && !testMode && (
+              <div className="banner banner-inline edit-words-banner">
+                <span>
+                  Click a line to change its words, then press Enter. The timing stays the same.
+                </span>
+                <button className="btn btn-small" onClick={() => setEditWords(false)}>
+                  Done
+                </button>
+              </div>
+            )}
             {!synced && (
               <div className="banner banner-inline">
                 These lyrics aren&apos;t timed, so they won&apos;t scroll by themselves.{' '}
@@ -869,6 +897,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               mastery={masteryFor}
               editSplits={editSplits}
               onToggleSplit={toggleSplit}
+              onEditLine={editWords && !testMode && !outro ? editLine : null}
               onLineClick={seekToLine}
               onSectionClick={selectSection}
               onSectionLoop={(i) => loop(i, i)}
@@ -1114,10 +1143,24 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
           )}
           {saved && (
             <p className="muted small">
-              {saved.source === 'user' ? 'Added by you' : saved.label} · {synced ? 'timed' : 'not timed'}
+              {saved.source === 'user' ? 'Added by you' : saved.label}
+              {saved.edited ? ' · words edited by you' : ''} · {synced ? 'timed' : 'not timed'}
             </p>
           )}
           <div className="tool-buttons">
+            {lines.some(isSung) && !testMode && (
+              <button
+                className={`btn btn-small ${editWords ? 'is-active' : ''}`}
+                onClick={() => {
+                  setEditWords((v) => !v)
+                  setEditSplits(false)
+                  setFixReadings(false)
+                }}
+                title="Click a line in the lyrics to change its words"
+              >
+                {editWords ? 'Done editing' : 'Edit words'}
+              </button>
+            )}
             <button className="btn btn-small" onClick={() => setOverlay('versions')}>
               Find another version
             </button>

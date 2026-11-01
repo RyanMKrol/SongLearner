@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendTapped, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc } from '../lyrics/lrc'
+import { appendTapped, lineIndexAt, parseLrc, parseLyrics, parsePlain, toLrc, withLineText } from '../lyrics/lrc'
 import { chooseRecord, cleanTrackName, fixLongVowels, normaliseName, type LrclibRecord } from '../lyrics/lrclib'
 import { autoSectionStarts, buildSections, innerAutoStarts, mergeStarts, sectionTimings, splitStarts } from '../lyrics/sections'
 
@@ -223,5 +223,33 @@ describe('appendTapped', () => {
     expect(appendTapped(lines, 4, 7, [60000])).toBeNull()
     expect(appendTapped(lines, 4, 7, [95000, 94000])).toBeNull()
     expect(appendTapped(parsePlain('a\nb').lines, 0, 1, [99999])).toBeNull()
+  })
+})
+
+describe('withLineText', () => {
+  it('changes one line of timed lyrics and keeps the timing and stanza breaks', () => {
+    const before = parseLrc(SONG).lines
+    const text = withLineText(before, 1, '  Carrying   a lighter load ')
+    expect(text).not.toBeNull()
+    const after = parseLyrics(text!)
+    expect(after.synced).toBe(true)
+    expect(after.lines[1].text).toBe('Carrying a lighter load')
+    expect(after.lines.map((l) => l.timeMs)).toEqual(before.map((l) => l.timeMs))
+    expect(after.lines.map((l) => l.stanzaBreakBefore)).toEqual(before.map((l) => l.stanzaBreakBefore))
+    expect(after.lines.filter((_, i) => i !== 1).map((l) => l.text)).toEqual(
+      before.filter((_, i) => i !== 1).map((l) => l.text),
+    )
+  })
+
+  it('changes one line of plain lyrics and keeps the verses', () => {
+    const before = parsePlain('One line\nTwo line\n\nThree line').lines
+    const after = parseLyrics(withLineText(before, 2, 'Third line')!)
+    expect(after.synced).toBe(false)
+    expect(after.lines.map((l) => l.text)).toEqual(['One line', 'Two line', 'Third line'])
+    expect(after.lines[2].stanzaBreakBefore).toBe(true)
+  })
+
+  it('refuses empty words', () => {
+    expect(withLineText(parseLrc(SONG).lines, 0, '   ')).toBeNull()
   })
 })

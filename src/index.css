@@ -1214,6 +1214,32 @@ button.romaji-word.is-fixed {
   gap: 10px;
 }
 
+.lyrics.is-editing-words .line:not(.is-gap) {
+  cursor: text;
+}
+
+.lyrics.is-editing-words .line:not(.is-gap):hover {
+  background: var(--panel-2);
+}
+
+.line-edit-input {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 2px 8px;
+  outline: none;
+}
+
+.edit-words-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .split-marker {
   font-size: 0.75rem;
   font-weight: 500;

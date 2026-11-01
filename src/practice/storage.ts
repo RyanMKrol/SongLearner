@@ -67,6 +67,8 @@ export interface SavedLyrics {
   addedFromLine?: number
   /** Set once the LRCLIB entry has been checked to really be this song. */
   verified?: boolean
+  /** You've changed the words of at least one line. */
+  edited?: boolean
 }
 
 export interface LibraryEntry {
