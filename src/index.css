@@ -565,6 +565,72 @@ kbd {
   font-weight: 600;
 }
 
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 260px;
+}
+
+.now-playing-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.now-playing-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.now-playing-track img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.now-playing-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.now-playing-name,
+.now-playing-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.now-playing-artist {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.now-playing-track:hover .now-playing-name {
+  text-decoration: underline;
+}
+
 .save-status {
   font-size: 0.8rem;
   color: var(--text-dim);

@@ -19,6 +19,7 @@ export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
         Song<span className="accent">Learner</span>
       </button>
       <SearchBox onPicked={onPicked} />
+      <NowPlaying onOpen={onPicked} />
       <button className="btn btn-ghost" onClick={onKaraoke} title="Sing your learned songs from memory">
         🎤 Karaoke set
       </button>
@@ -27,6 +28,32 @@ export function TopBar({ onHome, onKaraoke, onLogout, onPicked }: Props) {
         Log out
       </button>
     </header>
+  )
+}
+
+/** Play/pause for whatever's loaded, from any page. Click the song to go to it. */
+function NowPlaying({ onOpen }: { onOpen: (trackId: string) => void }) {
+  const player = usePlayer()
+  const track = player.track
+  if (!track || player.status !== 'ready') return null
+  return (
+    <div className="now-playing">
+      <button
+        className="btn now-playing-toggle"
+        onClick={() => void playerController.togglePlay('top bar')}
+        aria-label={player.paused ? 'Play' : 'Pause'}
+        title={player.paused ? 'Play' : 'Pause'}
+      >
+        {player.paused ? '▶' : '❚❚'}
+      </button>
+      <button className="now-playing-track" onClick={() => onOpen(track.id)} title={`Go to ${track.name}`}>
+        {track.imageUrl && <img src={track.imageUrl} alt="" />}
+        <span className="now-playing-text">
+          <span className="now-playing-name">{track.name}</span>
+          <span className="now-playing-artist">{track.artists.join(', ')}</span>
+        </span>
+      </button>
+    </div>
   )
 }
 

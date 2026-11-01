@@ -6,7 +6,7 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 ## What it does
 
 - Search Spotify and play any track right in the tab, or pull in whatever is already playing on
-  your account.
+  your account. The top bar has play/pause for the current song on every page.
 - Fetches timed lyrics from [LRCLIB](https://lrclib.net), a free community lyrics database. The
   current line is highlighted and the view follows along. Click any line to jump there.
 - Splits the lyrics into sections automatically (from stanza breaks and instrumental gaps) and
