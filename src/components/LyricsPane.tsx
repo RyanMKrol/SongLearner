@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LyricLine } from '../lyrics/lrc'
 import { isSung, type Section } from '../lyrics/sections'
-import type { HideLevel } from '../practice/mask'
+import type { Mask } from '../practice/mask'
 import type { Mastery } from '../practice/storage'
 import type { RomajiMode } from '../hooks'
 import type { RomajiLine, RomajiWord } from '../lyrics/romaji'
@@ -12,7 +12,7 @@ interface Props {
   synced: boolean
   sections: Section[]
   currentLine: number
-  hideFor: (lineIndex: number) => HideLevel
+  hideFor: (lineIndex: number) => Mask
   peek: boolean
   /** Romaji per line for Japanese lyrics, once it's ready. */
   romaji: (RomajiLine | null)[] | null

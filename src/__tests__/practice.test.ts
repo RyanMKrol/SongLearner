@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PlaybackClock } from '../playback/clock'
 import { LoopController, buildUpPlan, chainPlan } from '../playback/loop'
-import { maskText } from '../practice/mask'
+import { fadeMask, maskText } from '../practice/mask'
 
 const timings = [
   { startMs: 10000, endMs: 20000 },
@@ -67,6 +67,46 @@ describe('LoopController', () => {
       expect(loop.tick(30000, i * 2000)).toEqual({ type: 'seek', positionMs: 20000, pauseMs: 500 })
     }
     expect(loop.status.rep).toBe(6)
+  })
+})
+
+describe('section passes', () => {
+  it('counts how often each section has been played through, across build-up steps', () => {
+    // A (2 reps), then A+B (2 reps).
+    const loop = new LoopController(buildUpPlan(timings, 0, 1, 2, false), { leadInMs: 0, gapMs: 0 })
+    loop.start(0)
+    expect(loop.status.sectionPasses).toEqual({ 0: 0 })
+    let now = 0
+    loop.tick(20000, (now += 1000))
+    expect(loop.status.sectionPasses).toEqual({ 0: 1 })
+    loop.tick(20000, (now += 1000))
+    expect(loop.status.sectionPasses).toEqual({ 0: 2, 1: 0 })
+    loop.tick(30000, (now += 1000))
+    expect(loop.status.sectionPasses).toEqual({ 0: 3, 1: 1 })
+  })
+})
+
+describe('fade mask', () => {
+  it('shows everything before the first loop and hides it all after the last', () => {
+    expect(fadeMask(0, 4)).toBe(0)
+    expect(fadeMask(4, 4)).toEqual({ fade: 1 })
+    expect(fadeMask(9, 4)).toEqual({ fade: 1 })
+  })
+
+  it('hides the same share of every word, from the end', () => {
+    expect(maskText('Namida ni kure', { fade: 0.5 })).toEqual([
+      { text: 'Nam', masked: false },
+      { text: 'ida', masked: true },
+      { text: ' n', masked: false },
+      { text: 'i', masked: true },
+      { text: ' ku', masked: false },
+      { text: 're', masked: true },
+    ])
+    expect(maskText('Namida ni', { fade: 1 })).toEqual([
+      { text: 'Namida', masked: true },
+      { text: ' ', masked: false },
+      { text: 'ni', masked: true },
+    ])
   })
 })
 

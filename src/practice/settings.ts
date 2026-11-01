@@ -7,6 +7,8 @@ export interface PracticeSettings {
   soloFirst: boolean
   leadInMs: number
   gapMs: number
+  /** Loops it takes a "fade" section to hide every letter. */
+  fadeLoops: number
 }
 
 export const DEFAULT_PRACTICE_SETTINGS: PracticeSettings = {
@@ -15,4 +17,5 @@ export const DEFAULT_PRACTICE_SETTINGS: PracticeSettings = {
   soloFirst: false,
   leadInMs: 2000,
   gapMs: 0,
+  fadeLoops: 5,
 }

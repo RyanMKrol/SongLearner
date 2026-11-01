@@ -31,6 +31,8 @@ export interface LoopStatus {
   rep: number
   reps: number | null
   step: PracticeStep
+  /** Times each section has been played through so far, by section index. */
+  sectionPasses: Record<number, number>
 }
 
 /** Ignore position reports for a moment after a seek; the SDK can still report the old position. */
@@ -51,12 +53,21 @@ export class LoopController {
 
   get status(): LoopStatus {
     const step = this.steps[this.stepIndex]
+    const sectionPasses: Record<number, number> = {}
+    this.steps.slice(0, this.stepIndex + 1).forEach((s, i) => {
+      // Earlier steps finished all their reps; the current one is part way through.
+      const passes = i < this.stepIndex ? (s.reps ?? 0) : this.completedReps
+      for (let section = s.fromSection; section <= s.toSection; section++) {
+        sectionPasses[section] = (sectionPasses[section] ?? 0) + passes
+      }
+    })
     return {
       stepIndex: this.stepIndex,
       stepCount: this.steps.length,
       rep: this.completedReps + 1,
       reps: step.reps,
       step,
+      sectionPasses,
     }
   }
 

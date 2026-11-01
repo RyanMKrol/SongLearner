@@ -1,9 +1,9 @@
 import type { RomajiMode } from '../hooks'
 import { hasJapanese, type RomajiLine, type RomajiWord } from '../lyrics/romaji'
-import { maskText, type HideLevel } from '../practice/mask'
+import { maskText, type Mask } from '../practice/mask'
 
 /** A lyric line, with words partly or fully hidden in memorise mode. */
-export function LyricText({ text, level, peek }: { text: string; level: HideLevel; peek: boolean }) {
+export function LyricText({ text, level, peek }: { text: string; level: Mask; peek: boolean }) {
   if (level === 0 || peek) return <>{text}</>
   return (
     <>
@@ -82,7 +82,7 @@ function RomajiWords({
   onChooseReading,
 }: {
   line: RomajiLine
-  level: HideLevel
+  level: Mask
   peek: boolean
   fixMode: boolean
   onWordClick?: (word: RomajiWord) => void
@@ -149,7 +149,7 @@ export function LyricWithRomaji({
   text: string
   romaji: RomajiLine | null | undefined
   mode: RomajiMode
-  level: HideLevel
+  level: Mask
   peek: boolean
   fixMode?: boolean
   onWordClick?: (word: RomajiWord) => void

@@ -22,6 +22,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   section is practised alone before it's joined on.
 - **Memorise** mode shows only the first letter of each word, or hides the words completely. Hold
   `H` to peek.
+- **Fade** is a memorise setting for looping. The first time round you see every word, then each
+  loop hides more of every word, from the end backwards, until it's all gone. "Fade over" sets how
+  many loops that takes. In a build-up, the sections you've sung most fade first.
 - Rate each section (learning, almost, know it) to keep track of what still needs work.
 - **Performance mode** is a full-screen view for singing the whole thing through.
 - If LRCLIB only has untimed lyrics, or nothing at all, you can paste lyrics in and time them

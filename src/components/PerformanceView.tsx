@@ -3,7 +3,7 @@ import { usePlayer, usePosition, useDerivedFromPosition, type RomajiMode } from 
 import { lineIndexAt, type LyricLine } from '../lyrics/lrc'
 import type { RomajiLine } from '../lyrics/romaji'
 import { isSung } from '../lyrics/sections'
-import type { HideLevel } from '../practice/mask'
+import type { Mask } from '../practice/mask'
 import { playerController } from '../spotify/player'
 import { LyricWithRomaji } from './LyricText'
 
@@ -21,7 +21,7 @@ export function PerformanceView({
   lines: LyricLine[]
   offsetMs: number
   durationMs: number
-  hideFor: (lineIndex: number) => HideLevel
+  hideFor: (lineIndex: number) => Mask
   peek: boolean
   romaji: (RomajiLine | null)[] | null
   romajiMode: RomajiMode

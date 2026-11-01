@@ -27,7 +27,7 @@ import {
   type Section,
 } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
-import type { HideLevel } from '../practice/mask'
+import { fadeMask, type HideLevel, type Mask } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { log, logDebug } from '../log'
 import { rememberPosition } from '../playback/positions'
@@ -442,12 +442,18 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   )
 
   const hideForSection = useCallback((s: Section): HideLevel => prefs.hide[s.startLine] ?? 0, [prefs.hide])
+  const practiceStatus = practice.status
   const hideFor = useCallback(
-    (lineIndex: number): HideLevel => {
+    (lineIndex: number): Mask => {
       const s = sectionOfLine(lineIndex)
-      return s ? hideForSection(s) : 0
+      if (!s) return 0
+      const level = hideForSection(s)
+      if (level !== 3) return level
+      // Fade sections lose more of each word every time they're looped, and show everything otherwise.
+      const passes = practiceStatus?.sectionPasses[s.index]
+      return passes === undefined ? 0 : fadeMask(passes, settings.fadeLoops)
     },
-    [sectionOfLine, hideForSection],
+    [sectionOfLine, hideForSection, practiceStatus, settings.fadeLoops],
   )
   const masteryFor = useCallback((s: Section): Mastery => prefs.mastery[s.startLine] ?? 0, [prefs.mastery])
 

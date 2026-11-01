@@ -1621,6 +1621,11 @@ input[type='range'] {
   color: var(--accent);
 }
 
+.hide-btn.hide-3 {
+  color: var(--loop);
+  font-size: 0.75rem;
+}
+
 .memorise-row {
   display: flex;
   gap: 6px;

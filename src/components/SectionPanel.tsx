@@ -7,8 +7,13 @@ import type { PracticeSettings } from '../practice/settings'
 import type { Mastery } from '../practice/storage'
 
 const MASTERY_LABELS = ['Not started', 'Learning', 'Almost', 'Know it'] as const
-const HIDE_LABELS = ['Aa', 'A…', '…'] as const
-const HIDE_TITLES = ['Showing all words', 'First letters only', 'Words hidden'] as const
+const HIDE_LABELS = ['Aa', 'A…', '…', 'Fade'] as const
+const HIDE_TITLES = [
+  'Showing all words',
+  'First letters only',
+  'Words hidden',
+  'Fades as you loop: more of each word hidden every time round',
+] as const
 
 interface Props {
   sections: Section[]
@@ -197,7 +202,7 @@ export function SectionPanel(props: Props) {
                 <button
                   className={`btn btn-small hide-btn hide-${hide}`}
                   title={`${HIDE_TITLES[hide]} (click to change)`}
-                  onClick={() => props.onHide(section, ((hide + 1) % 3) as HideLevel)}
+                  onClick={() => props.onHide(section, ((hide + 1) % 4) as HideLevel)}
                 >
                   {HIDE_LABELS[hide]}
                 </button>
@@ -209,9 +214,9 @@ export function SectionPanel(props: Props) {
 
       <div className="memorise-row">
         <span className="muted small">Memorise all:</span>
-        {([0, 1, 2] as HideLevel[]).map((level) => (
+        {([0, 1, 2, 3] as HideLevel[]).map((level) => (
           <button key={level} className="btn btn-small" onClick={() => props.onHideAll(level)} title={HIDE_TITLES[level]}>
-            {level === 0 ? 'Show' : level === 1 ? 'First letters' : 'Hide'}
+            {(['Show', 'First letters', 'Hide', 'Fade'] as const)[level]}
           </button>
         ))}
       </div>
@@ -305,6 +310,16 @@ export function SectionPanel(props: Props) {
                 {[0, 1000, 2000, 3000, 5000].map((ms) => (
                   <option key={ms} value={ms}>
                     {ms / 1000}s
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="inline-field" title="For sections set to Fade: how many loops until every letter is hidden">
+              <span className="muted small">Fade over</span>
+              <select value={settings.fadeLoops} onChange={(e) => set({ fadeLoops: Number(e.target.value) })}>
+                {[2, 3, 4, 5, 6, 8, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {n} loops
                   </option>
                 ))}
               </select>
