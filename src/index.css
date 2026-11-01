@@ -1050,6 +1050,24 @@ button.romaji-word.is-fixed {
   margin-bottom: 8px;
 }
 
+.calibrate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: var(--loop);
+}
+
+.calibrate-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.calibrate-btn {
+  margin-top: 8px;
+}
+
 .align-box {
   display: flex;
   flex-direction: column;

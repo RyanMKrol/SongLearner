@@ -28,6 +28,7 @@ import {
   type Section,
 } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
+import { estimateOffset, MIN_HITS } from '../playback/calibrate'
 import { fadeMask, type HideLevel, type Mask } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { log, logDebug } from '../log'
@@ -676,6 +677,42 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     [updatePrefs],
   )
 
+  // Timing calibration: tap Space as each word starts, and the median gap between your taps and the
+  // word timings says how far to move the lyrics. Taps are kept as song positions, so they're
+  // measured against whatever the offset is when the result is worked out.
+  const [calibration, setCalibration] = useState<{ positions: number[] } | null>(null)
+  const wordStarts = useMemo(
+    () => (wordTiming ? Object.values(wordTiming.lines).flatMap((l) => l.words.map((w) => w.startMs)) : []),
+    [wordTiming],
+  )
+  const calibrationResult = useMemo(
+    () => (calibration ? estimateOffset(calibration.positions.map((p) => p + offset), wordStarts) : null),
+    [calibration, offset, wordStarts],
+  )
+  const startCalibration = () => {
+    log('calibrate', 'started', { offsetMs: offset })
+    setEditWords(false)
+    setCalibration({ positions: [] })
+    if (playerController.getSnapshot().paused) void playerController.togglePlay('calibrate: start')
+  }
+  const tapCalibration = () => {
+    const at = playerController.clock.position()
+    setCalibration((c) => c && { positions: [...c.positions, at] })
+  }
+  const endCalibration = (apply: boolean) => {
+    if (apply && calibrationResult) {
+      log('calibrate', 'applied', { from: offset, to: offset + calibrationResult.deltaMs, ...calibrationResult })
+      setOffset(offset + calibrationResult.deltaMs)
+    } else {
+      log('calibrate', 'cancelled', { taps: calibration?.positions.length ?? 0 })
+    }
+    setCalibration(null)
+  }
+  const calibrationKeysRef = useRef({ active: false, tap: tapCalibration, end: endCalibration })
+  useEffect(() => {
+    calibrationKeysRef.current = { active: calibration !== null, tap: tapCalibration, end: endCalibration }
+  })
+
   const applyLyrics = (next: SavedLyrics) => {
     replace(next)
     updatePrefs((p) => resetLineKeyedPrefs({ ...p, offsetMs: 0 }))
@@ -700,6 +737,18 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
       if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return
       const pos = playerController.clock.position()
       if (!e.repeat) logDebug('keys', 'pressed', { key: e.key, position: Math.round(pos) })
+      const calibrationKeys = calibrationKeysRef.current
+      if (calibrationKeys.active) {
+        if (e.key === ' ') {
+          e.preventDefault()
+          if (!e.repeat) calibrationKeys.tap()
+          return
+        }
+        if (e.key === 'Escape') {
+          calibrationKeys.end(false)
+          return
+        }
+      }
       const outroKeys = outroKeysRef.current
       if (outroKeys.active) {
         if (e.key === ' ') {
@@ -935,6 +984,61 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
                 </div>
               </div>
             )}
+            {calibration && (
+              <div className="banner banner-inline calibrate-banner">
+                <div>
+                  <strong>Calibrating timing:</strong> tap Space as each word starts, for a line or two.{' '}
+                  <span className="muted">
+                    {calibration.positions.length} {calibration.positions.length === 1 ? 'tap' : 'taps'}
+                  </span>
+                  <div className="small">
+                    {calibrationResult === null ? (
+                      <span className="muted">
+                        Keep going: the result shows once {MIN_HITS} taps line up with words.
+                      </span>
+                    ) : Math.abs(calibrationResult.deltaMs) < 50 ? (
+                      <span className="good">The timing already matches your taps.</span>
+                    ) : (
+                      <span>
+                        The words are {Math.abs(calibrationResult.deltaMs / 1000).toFixed(2)}s{' '}
+                        {calibrationResult.deltaMs > 0 ? 'late' : 'early'}: the timing becomes{' '}
+                        {Math.abs((offset + calibrationResult.deltaMs) / 1000).toFixed(2)}s{' '}
+                        {offset + calibrationResult.deltaMs >= 0 ? 'earlier' : 'later'}.
+                      </span>
+                    )}
+                    {calibrationResult && (
+                      <span className="muted">
+                        {' '}
+                        ({calibrationResult.hits} of {calibrationResult.taps} taps matched
+                        {calibrationResult.spreadMs > 150 ? '; your taps were uneven, so a few more will help' : ''})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="calibrate-actions">
+                  <button className="btn btn-primary touch-only calibrate-tap" onPointerDown={tapCalibration}>
+                    Tap
+                  </button>
+                  <button
+                    className="btn btn-small btn-primary"
+                    disabled={!calibrationResult}
+                    onClick={() => endCalibration(true)}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    className="btn btn-small"
+                    disabled={calibration.positions.length === 0}
+                    onClick={() => setCalibration({ positions: [] })}
+                  >
+                    Start over
+                  </button>
+                  <button className="btn btn-small btn-ghost" onClick={() => endCalibration(false)}>
+                    Cancel (Esc)
+                  </button>
+                </span>
+              </div>
+            )}
             {editWords && !testMode && (
               <div className="banner banner-inline edit-words-banner">
                 <span>
@@ -1043,7 +1147,13 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
           </button>
         )}
 
-        {synced && <TimingControl offsetMs={offset} onChange={setOffset} />}
+        {synced && (
+          <TimingControl
+            offsetMs={offset}
+            onChange={setOffset}
+            onCalibrate={wordTiming && !calibration && !testMode ? startCalibration : undefined}
+          />
+        )}
 
         {sections.length > 0 && (
           <SectionPanel

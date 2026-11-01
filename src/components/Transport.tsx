@@ -86,7 +86,16 @@ export function Transport({ durationMs, practiceRange }: Props) {
   )
 }
 
-export function TimingControl({ offsetMs, onChange }: { offsetMs: number; onChange: (ms: number) => void }) {
+export function TimingControl({
+  offsetMs,
+  onChange,
+  onCalibrate,
+}: {
+  offsetMs: number
+  onChange: (ms: number) => void
+  /** Set when the song has word timings to tap against. */
+  onCalibrate?: () => void
+}) {
   const describe =
     offsetMs === 0
       ? 'as published'
@@ -118,6 +127,15 @@ export function TimingControl({ offsetMs, onChange }: { offsetMs: number; onChan
           </button>
         )}
       </div>
+      {onCalibrate && (
+        <button
+          className="btn btn-small calibrate-btn"
+          onClick={onCalibrate}
+          title="Tap along with the words to set the timing"
+        >
+          Calibrate by tapping
+        </button>
+      )}
     </div>
   )
 }

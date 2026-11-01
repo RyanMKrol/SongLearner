@@ -29,7 +29,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - **Performance mode** is a full-screen view for singing the whole thing through.
 - If LRCLIB only has untimed lyrics, or nothing at all, you can paste lyrics in and time them
   yourself by tapping Space at the start of each line while the song plays.
-- A timing slider fixes lyrics that run slightly early or late.
+- A timing slider fixes lyrics that run slightly early or late. On songs with word timings,
+  "Calibrate by tapping" sets it for you: tap Space as each word starts for a line or two, and it
+  works out how far off the words are.
 - **Karaoke fill** (optional) fills in each word of the current line as it's sung. Click "Align
   words to the music" and the app finds the song on YouTube, separates the vocals and works out
   when each word starts. If it picked the wrong version, "Change audio" takes a YouTube link or an
