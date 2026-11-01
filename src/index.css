@@ -1584,6 +1584,11 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 
+.section-row-reps {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .section-row-controls {
   display: flex;
   align-items: center;

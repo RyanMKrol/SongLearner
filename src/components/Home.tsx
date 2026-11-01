@@ -140,7 +140,7 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           <li>Loop one section at a time until you can sing along.</li>
           <li>Use Build up to chain sections: A, then A+B, then A+B+C.</li>
           <li>Turn on Memorise to fade the words to first letters, then hide them.</li>
-          <li>Finish with Performance mode for a full run-through.</li>
+          <li>Turn off “Loop sections as you play” and finish with Performance mode for a full run-through.</li>
         </ol>
         <p className="muted small">
           Shortcuts: Space play/pause · ←/→ 5 seconds · ↑/↓ previous/next line · L loop the current

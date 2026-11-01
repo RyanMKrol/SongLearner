@@ -3,6 +3,7 @@ import { log, logError, logWarn } from './log'
 import type { LyricLine } from './lyrics/lrc'
 import { chooseRecord, findLyrics, getLrclibRecord } from './lyrics/lrclib'
 import { hasJapanese, romanizeLines, type ReadingFixes, type RomajiLine } from './lyrics/romaji'
+import { AutoLoopWatcher, type AutoLoopSpan } from './playback/autoLoop'
 import { LoopController, type LoopOptions, type LoopStatus, type PracticeStep } from './playback/loop'
 import { TestTracker, type TestSpan } from './playback/testTracker'
 import { loadSavedLyrics, saveLyrics, updatePrefs, type SavedLyrics } from './practice/storage'
@@ -220,16 +221,19 @@ export function useRomaji(lines: LyricLine[], fixes: ReadingFixes): RomajiState 
 
 const LOOP_TICK_MS = 30
 
+type PracticeRange = { fromSection: number; toSection: number }
+
 export interface PracticeState {
   status: LoopStatus | null
   /** Set when a plan runs to completion, so the UI can ask how it went. */
-  finished: { fromSection: number; toSection: number } | null
+  finished: PracticeRange | null
 }
 
 /** Runs a practice plan against the player: watches the position and seeks back as needed. */
 export function usePractice() {
   const controllerRef = useRef<LoopController | null>(null)
   const gapTimer = useRef<number | null>(null)
+  const onFinishedRef = useRef<((range: PracticeRange) => void) | null>(null)
   const [state, setState] = useState<PracticeState>({ status: null, finished: null })
 
   const clearGap = () => {
@@ -268,30 +272,36 @@ export function usePractice() {
         void playerController.seek(action.positionMs, 'loop: jump back')
       }
     } else if (action.type === 'finished') {
-      void playerController.pause('loop: practice finished')
+      // Playback carries on into the rest of the song.
       const steps = controller.steps
       controllerRef.current = null
-      setState({
-        status: null,
-        finished: {
-          fromSection: Math.min(...steps.map((s) => s.fromSection)),
-          toSection: Math.max(...steps.map((s) => s.toSection)),
-        },
-      })
+      const finished = {
+        fromSection: Math.min(...steps.map((s) => s.fromSection)),
+        toSection: Math.max(...steps.map((s) => s.toSection)),
+      }
+      setState({ status: null, finished })
+      onFinishedRef.current?.(finished)
       return
     }
     setState({ status: controller.status, finished: null })
   }, [])
 
   const start = useCallback(
-    (steps: PracticeStep[], options: LoopOptions) => {
+    (steps: PracticeStep[], options: LoopOptions, onFinished?: (range: PracticeRange) => void, join = false) => {
       clearGap()
       const controller = new LoopController(steps, options)
+      onFinishedRef.current = onFinished ?? null
       log('practice', 'started', {
         steps: steps.map((s) => ({ from: s.fromSection, to: s.toSection, startMs: Math.round(s.startMs), endMs: Math.round(s.endMs), reps: s.reps })),
         ...options,
       })
       controllerRef.current = controller
+      if (join) {
+        // Playback is already at the start of the section, so this pass is the first rep.
+        controller.join(performance.now())
+        setState({ status: controller.status, finished: null })
+        return
+      }
       execute(controller, controller.start(performance.now()))
       void playerController.resume('loop: start practice')
     },
@@ -366,6 +376,47 @@ export function useTestMode(
   }, [peek])
 
   return enabled ? attempt : null
+}
+
+/**
+ * Watches normal playback and calls `onEnter` when it reaches the start of a section that loops.
+ * Does nothing while a loop is `running`. Returns `suppress`, to leave sections alone after a stop.
+ */
+export function useAutoLoop(
+  enabled: boolean,
+  spans: AutoLoopSpan[],
+  running: boolean,
+  onEnter: (sectionIndex: number) => void,
+): (from: number, to: number) => void {
+  const watcherRef = useRef(new AutoLoopWatcher(spans))
+  const onEnterRef = useRef(onEnter)
+  const runningRef = useRef(running)
+  useEffect(() => {
+    onEnterRef.current = onEnter
+    runningRef.current = running
+    watcherRef.current.setSpans(spans)
+  }, [onEnter, running, spans])
+
+  useEffect(() => {
+    if (!enabled) return
+    const watcher = watcherRef.current
+    watcher.reset()
+    const id = window.setInterval(() => {
+      const clock = playerController.clock
+      if (runningRef.current || !clock.isPlaying) {
+        watcher.reset()
+        return
+      }
+      const section = watcher.tick(clock.position())
+      if (section !== null) {
+        log('practice', 'auto loop', { section, position: Math.round(clock.position()) })
+        onEnterRef.current(section)
+      }
+    }, LOOP_TICK_MS)
+    return () => window.clearInterval(id)
+  }, [enabled])
+
+  return useCallback((from: number, to: number) => watcherRef.current.suppress(from, to), [])
 }
 
 /** True while the given key is held down (ignoring typing in form fields). */

@@ -72,6 +72,14 @@ export class LoopController {
     return { type: 'seek', positionMs: this.restartPoint(), pauseMs: 0 }
   }
 
+  /** Begin practising from where playback already is, at the step's start: that pass is rep 1. */
+  join(now: number): LoopAction {
+    this.stepIndex = 0
+    this.completedReps = 0
+    this.settleUntil = now
+    return { type: 'none' }
+  }
+
   tick(positionMs: number, now: number): LoopAction {
     if (now < this.settleUntil) return { type: 'none' }
     const step = this.steps[this.stepIndex]

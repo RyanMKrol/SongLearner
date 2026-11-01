@@ -29,6 +29,11 @@ interface Props {
   settings: PracticeSettings
   onSettings: (s: PracticeSettings) => void
   onLoop: (from: number, to: number) => void
+  /** Times sections from..to will loop: what's saved for them, or the default. */
+  loopReps: (from: number, to: number) => number | null
+  onLoopReps: (from: number, to: number, reps: number | null) => void
+  /** What's saved for one section, if anything. */
+  savedLoopReps: (section: Section) => number | null | undefined
   onBuildUp: (from: number, to: number) => void
   /** Turn sections from..to into one. */
   onMerge: (from: number, to: number) => void
@@ -102,7 +107,7 @@ export function SectionPanel(props: Props) {
       {props.finished && (
         <div className="practice-status is-finished">
           <div>
-            <strong>Done! How well do you know it now?</strong>
+            <strong>Done! The song carries on. How well do you know it now?</strong>
             <div className="rate-row">
               {([1, 2, 3] as Mastery[]).map((m) => (
                 <button key={m} className={`btn btn-small mastery-btn-${m}`} onClick={() => props.onRateFinished(m)}>
@@ -120,6 +125,7 @@ export function SectionPanel(props: Props) {
           const selected = sel !== null && section.index >= sel.from && section.index <= sel.to
           const mastery = props.mastery(section)
           const hide = props.hide(section)
+          const savedReps = props.savedLoopReps(section)
           return (
             <div
               key={section.startLine}
@@ -161,6 +167,11 @@ export function SectionPanel(props: Props) {
                   </span>
                 )}
                 {timing && <span className="muted small section-row-time">{formatTime(timing.startMs)}</span>}
+                {savedReps !== undefined && savedReps !== 1 && (
+                  <span className="muted small section-row-reps" title="Times you loop this section">
+                    {savedReps === null ? '∞' : `${savedReps}×`}
+                  </span>
+                )}
               </span>
               <span className="section-row-controls" onClick={(e) => e.stopPropagation()}>
                 {props.canSplit(section) && (
@@ -237,8 +248,10 @@ export function SectionPanel(props: Props) {
             </button>
             <label className="inline-field">
               <select
-                value={settings.loopReps ?? 0}
-                onChange={(e) => set({ loopReps: Number(e.target.value) || null })}
+                value={(sel ? props.loopReps(sel.from, sel.to) : 1) ?? 0}
+                disabled={!sel}
+                title="Saved for the selected section. With “Loop sections as you play” on, sections set above 1× loop by themselves when the song reaches them."
+                onChange={(e) => sel && props.onLoopReps(sel.from, sel.to, Number(e.target.value) || null)}
               >
                 <option value={0}>forever</option>
                 {[1, 2, 3, 5, 10].map((n) => (
@@ -247,6 +260,15 @@ export function SectionPanel(props: Props) {
                   </option>
                 ))}
               </select>
+            </label>
+          </div>
+          <div className="practice-actions">
+            <label
+              className="inline-field checkbox"
+              title="Sections set above 1× loop by themselves when the song reaches them. Turn off for a full run-through; the counts are kept."
+            >
+              <input type="checkbox" checked={settings.autoLoop} onChange={(e) => set({ autoLoop: e.target.checked })} />
+              <span className="small">Loop sections as you play</span>
             </label>
           </div>
           <div className="practice-actions">

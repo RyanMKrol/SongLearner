@@ -6,6 +6,7 @@ import {
   useLyrics,
   usePlayer,
   usePractice,
+  useAutoLoop,
   useTestMode,
   useRomaji,
   type RomajiMode,
@@ -74,7 +75,9 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   const { state: lyricsState, replace, refetch } = useLyrics(track)
   const [prefs, updatePrefs] = useTrackPrefs(track.id)
   const practice = usePractice()
-  const [settings, setSettings] = useLocalSetting<PracticeSettings>('practice', DEFAULT_PRACTICE_SETTINGS)
+  const [savedSettings, setSettings] = useLocalSetting<PracticeSettings>('practice', DEFAULT_PRACTICE_SETTINGS)
+  // Settings saved before a newer option existed get its default.
+  const settings = useMemo(() => ({ ...DEFAULT_PRACTICE_SETTINGS, ...savedSettings }), [savedSettings])
   const [selection, setSelection] = useState<{ from: number; to: number } | null>(null)
   const [editSplits, setEditSplits] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
@@ -448,17 +451,84 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   )
   const masteryFor = useCallback((s: Section): Mastery => prefs.mastery[s.startLine] ?? 0, [prefs.mastery])
 
+  // How many times each section (or run of sections) is looped is remembered for the song.
+  const repsKey = useCallback(
+    (from: number, to: number): string | null => {
+      const first = sections[from]
+      const last = sections[to]
+      if (!first || !last) return null
+      return from === to ? String(first.startLine) : `${first.startLine}-${last.startLine}`
+    },
+    [sections],
+  )
+  const loopRepsFor = useCallback(
+    (from: number, to: number): number | null => {
+      const key = repsKey(from, to)
+      // Sections with nothing saved play once.
+      const saved = key === null ? undefined : prefs.loopReps?.[key]
+      return saved === undefined ? 1 : saved
+    },
+    [repsKey, prefs.loopReps],
+  )
+  const saveLoopReps = useCallback(
+    (from: number, to: number, reps: number | null) => {
+      const key = repsKey(from, to)
+      if (key === null || prefs.loopReps?.[key] === reps) return
+      updatePrefs((p) => ({ ...p, loopReps: { ...p.loopReps, [key]: reps } }))
+    },
+    [repsKey, prefs.loopReps, updatePrefs],
+  )
+
   // Practice actions.
   const { start: startPractice, stop: stopPractice } = practice
+  // When a loop ends the song plays on, so select the next section, ready to loop with L.
+  const selectNext = useCallback(
+    (range: { toSection: number }) => {
+      const next = range.toSection + 1
+      if (next < sections.length) setSelection({ from: next, to: next })
+    },
+    [sections.length],
+  )
   const loop = useCallback(
     (from: number, to: number) => {
       if (!synced || sections.length === 0) return
       playerController.activate()
       setSelection({ from, to })
-      startPractice(chainPlan(songTimings, from, to, settings.loopReps), settings)
+      // Asking to loop something set to play once loops it until stopped.
+      const reps = loopRepsFor(from, to)
+      startPractice(chainPlan(songTimings, from, to, reps === 1 ? null : reps), settings, selectNext)
     },
-    [synced, sections.length, songTimings, settings, startPractice],
+    [synced, sections.length, songTimings, settings, startPractice, loopRepsFor, selectNext],
   )
+
+  // Sections set to loop more than once loop by themselves when playback reaches them.
+  const autoSpans = useMemo(
+    () =>
+      songTimings.map((t, i) => {
+        const reps = loopRepsFor(i, i)
+        return { ...t, loops: reps !== null && reps > 1 }
+      }),
+    [songTimings, loopRepsFor],
+  )
+  const autoLoop = useCallback(
+    (i: number) => {
+      setSelection({ from: i, to: i })
+      startPractice(chainPlan(songTimings, i, i, loopRepsFor(i, i)), settings, selectNext, true)
+    },
+    [songTimings, loopRepsFor, settings, startPractice, selectNext],
+  )
+  const suppressAutoLoop = useAutoLoop(
+    settings.autoLoop && synced && !testMode && !karaoke,
+    autoSpans,
+    practice.status !== null,
+    autoLoop,
+  )
+  const practiceRunning = practice.status
+  const stopLooping = useCallback(() => {
+    // Stopping a loop shouldn't start it again straight away.
+    if (practiceRunning) suppressAutoLoop(practiceRunning.step.fromSection, practiceRunning.step.toSection)
+    stopPractice()
+  }, [practiceRunning, suppressAutoLoop, stopPractice])
   const buildUp = useCallback(
     (from: number, to: number) => {
       if (!synced) return
@@ -643,7 +713,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
         }
         case 'Escape':
           if (overlay === 'performance') setOverlay(null)
-          else if (practice.status) stopPractice()
+          else if (practice.status) stopLooping()
           else if (editSplits) setEditSplits(false)
           else if (editWords) setEditWords(false)
           break
@@ -677,6 +747,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     sectionOfLine,
     practice.status,
     stopPractice,
+    stopLooping,
     editSplits,
     editWords,
     setOffset,
@@ -961,15 +1032,22 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
             customSplits={prefs.sectionStarts !== undefined}
             onResetSplits={() => updatePrefs((p) => ({ ...p, sectionStarts: undefined }))}
             settings={settings}
-            onSettings={setSettings}
+            onSettings={(next) => {
+              // Turning looping off stops whatever is looping now.
+              if (settings.autoLoop && !next.autoLoop) stopPractice()
+              setSettings(next)
+            }}
             onLoop={loop}
+            loopReps={loopRepsFor}
+            onLoopReps={saveLoopReps}
+            savedLoopReps={(sec) => prefs.loopReps?.[String(sec.startLine)]}
             onBuildUp={buildUp}
             onMerge={mergeSections}
             canSplit={canSplit}
             onSplit={splitSection}
             practice={practice.status}
             finished={practice.finished}
-            onStop={stopPractice}
+            onStop={stopLooping}
             onRateFinished={(m) => {
               const range = practice.finished
               if (range) {

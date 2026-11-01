@@ -1,6 +1,6 @@
 export interface PracticeSettings {
-  /** Loop repetitions, or null to loop until stopped. */
-  loopReps: number | null
+  /** Sections set to loop do so by themselves when the song reaches them. Off for a full run-through. */
+  autoLoop: boolean
   /** Repetitions of each step in a build-up drill. */
   buildReps: number
   /** In a build-up, practise each new section alone before joining it on. */
@@ -10,7 +10,7 @@ export interface PracticeSettings {
 }
 
 export const DEFAULT_PRACTICE_SETTINGS: PracticeSettings = {
-  loopReps: null,
+  autoLoop: true,
   buildReps: 2,
   soloFirst: false,
   leadInMs: 2000,

@@ -15,6 +15,9 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   larger chunks (and split it back later).
 - **Loop** a section or a run of sections, with a short run-up before it and an optional pause
   between repeats.
+- Each section remembers **how many times it loops**. While "Loop sections as you play" is on, a
+  section set above 1× repeats that many times when the song reaches it, then the song plays on.
+  Turn the setting off for a full run-through; the counts are kept for next time.
 - **Build up** drills a run of sections cumulatively: A, then A+B, then A+B+C. Optionally each new
   section is practised alone before it's joined on.
 - **Memorise** mode shows only the first letter of each word, or hides the words completely. Hold
