@@ -58,9 +58,12 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
   can switch each one off. This needs an Anthropic API key (see Setup) and runs once per song.
 - **Karaoke set**: an automatic playlist (inside the app, not on Spotify) of every song you've
   fully learned. A song joins once all its sections are learned and leaves if one is marked not
-  learned. Songs play back to back with the words blurred; sections you sing through without
-  pausing, skipping or peeking count, and each song's score is saved. Songs with slips can be sent
-  back to learning in one click.
+  learned. You can also add a song by hand without learning it first, from the set's page or the
+  song's page, and take any song out. A song you add stays until you take it out, and a learned
+  song you take out stays out until you add it back. Songs play back to back with the words
+  blurred; sections you sing through without pausing, skipping or peeking count, and each song's
+  score is saved. Songs with slips can be sent back to learning in one click, which also takes
+  them out of the set.
 - **Playlists**: the + on a song card adds it to a playlist (or starts a new one). Each playlist
   has its own page where you can reorder songs, then play through them with the lyrics showing,
   or test yourself on them with the words hidden and a score at the end.

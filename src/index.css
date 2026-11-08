@@ -1500,6 +1500,10 @@ button.romaji-word.is-fixed {
   padding: 10px;
 }
 
+.karaoke-toggle {
+  width: 100%;
+}
+
 .section-header-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2540,6 +2544,16 @@ input[type='range'] {
 
   .karaoke-result:not(.playlist-row) > :is(.muted, .btn) {
     margin-left: 62px;
+  }
+
+  /* Add and remove stay on the first line, beside the song. */
+  .karaoke-result:not(.playlist-row) > .karaoke-row-action {
+    order: 1;
+    margin-left: 0;
+  }
+
+  .karaoke-result:not(.playlist-row) > .muted {
+    order: 2;
   }
 
   .karaoke-result-text strong {

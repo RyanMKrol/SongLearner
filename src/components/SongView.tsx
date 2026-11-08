@@ -29,6 +29,7 @@ import {
 } from '../lyrics/sections'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import { estimateOffset, MIN_HITS } from '../playback/calibrate'
+import { karaokeChoiceFor, karaokeJoinedAt } from '../practice/karaokeSet'
 import { fadeMask, type HideLevel, type Mask } from '../practice/mask'
 import { addToLibrary, useLocalSetting, useTrackPrefs, type Mastery, type SavedLyrics, type TrackPrefs } from '../practice/storage'
 import { log, logDebug } from '../log'
@@ -430,9 +431,11 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   const testAttempt = useTestMode(testMode && synced, songTimings, peek, onSectionPassed)
 
   const learnedCount = sections.filter((s) => prefs.mastery[s.startLine] === 3).length
+  const inKaraokeSet = karaokeJoinedAt(prefs) !== null
 
   // Keep the song's progress up to date for the library and the karaoke set. A song is learned
-  // when every section is; it joins the karaoke set then, and leaves it if one is unlearned.
+  // when every section is; it joins the karaoke set then, and leaves it if one is unlearned,
+  // unless you've added it or taken it out by hand (see karaokeSet.ts).
   useEffect(() => {
     if (!synced || sections.length === 0) return
     const current = prefs.progress
@@ -440,8 +443,8 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
     if (current?.sections === sections.length && current.learned === learnedCount && Boolean(current.completedAt) === complete) {
       return
     }
-    if (complete && !current?.completedAt) log('song-view', 'song learned (added to the karaoke set)', { trackId: track.id })
-    if (!complete && current?.completedAt) log('song-view', 'song no longer fully learned (left the karaoke set)', { trackId: track.id })
+    if (complete && !current?.completedAt) log('song-view', 'song learned', { trackId: track.id })
+    if (!complete && current?.completedAt) log('song-view', 'song no longer fully learned', { trackId: track.id })
     updatePrefs((p) => ({
       ...p,
       progress: {
@@ -1172,6 +1175,18 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
             onClick={() => setTestMode((v) => !v)}
           >
             {testMode ? 'Exit test mode (T)' : `Test yourself (T) · ${learnedCount}/${sections.length} learned`}
+          </button>
+        )}
+
+        {synced && sections.length > 0 && (
+          <button
+            className={`btn btn-small karaoke-toggle ${inKaraokeSet ? 'is-active' : ''}`}
+            title={inKaraokeSet ? 'Take this song out of the karaoke set' : 'Add this song to the karaoke set, learned or not'}
+            onClick={() =>
+              updatePrefs((p) => ({ ...p, karaokeChoice: karaokeChoiceFor(p, !inKaraokeSet, Date.now()) }))
+            }
+          >
+            {inKaraokeSet ? '✓ In your karaoke set' : '🎤 Add to karaoke set'}
           </button>
         )}
 

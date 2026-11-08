@@ -5,13 +5,13 @@ import { PlaylistMenu, PlaylistsSection } from './Playlists'
 import { log, logError } from '../log'
 import { forgetAudio } from '../lyrics/wordAlign'
 import { playerController } from '../spotify/player'
-import { deleteSong, loadLearnedSongs, loadLibrary, masterySummary, usePlaylists, type LibraryEntry } from '../practice/storage'
+import { deleteSong, isInKaraokeSet, loadKaraokeSongs, loadLibrary, masterySummary, usePlaylists, type LibraryEntry } from '../practice/storage'
 
 export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) => void; onKaraoke: () => void }) {
   const player = usePlayer()
   const [library, setLibrary] = useState(loadLibrary)
   const [message, setMessage] = useState<string | null>(null)
-  const [learnedCount] = useState(() => loadLearnedSongs().length)
+  const [karaokeCount] = useState(() => loadKaraokeSongs().length)
   const playlists = usePlaylists()
   // Songs in a playlist live on that playlist's page, so they aren't repeated here.
   const inAPlaylist = new Set(playlists.flatMap((p) => p.trackIds))
@@ -74,9 +74,9 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           <button className="btn btn-primary" disabled={!ready} onClick={() => void bringHere()}>
             Use what&apos;s playing on Spotify
           </button>
-          {learnedCount > 0 && (
+          {karaokeCount > 0 && (
             <button className="btn" onClick={onKaraoke}>
-              🎤 Karaoke set ({learnedCount} learned {learnedCount === 1 ? 'song' : 'songs'})
+              🎤 Karaoke set ({karaokeCount} {karaokeCount === 1 ? 'song' : 'songs'})
             </button>
           )}
           {player.track && (
@@ -102,20 +102,15 @@ export function Home({ onOpenSong, onKaraoke }: { onOpenSong: (trackId: string) 
           <div className="library">
             {looseSongs.map((entry) => {
               const summary = masterySummary(entry.id)
+              const progress = summary && (summary.complete ? '✓ Learned' : `${summary.known} of ${summary.total} sections learned`)
+              const status = [progress, isInKaraokeSet(entry.id) && 'in your karaoke set'].filter(Boolean).join(' · ')
               return (
                 <div key={entry.id} className="library-card">
                   <button className="library-open" disabled={!ready} onClick={() => void open(entry)}>
                     {entry.imageUrl ? <img src={entry.imageUrl} alt="" /> : <span className="art-placeholder" />}
                     <span className="library-name">{entry.name}</span>
                     <span className="muted small">{entry.artists.join(', ')}</span>
-                    {summary &&
-                      (summary.complete ? (
-                        <span className="library-progress small">✓ Learned · in your karaoke set</span>
-                      ) : (
-                        <span className="library-progress small">
-                          {summary.known} of {summary.total} sections learned
-                        </span>
-                      ))}
+                    {status && <span className="library-progress small">{status}</span>}
                   </button>
                   <PlaylistMenu trackId={entry.id} songName={entry.name} />
                   <button

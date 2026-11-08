@@ -1,11 +1,11 @@
 // Plays a list of songs back to back: a playlist, or the karaoke set (every song you've fully
-// learned). In a test run the lyrics are blurred; sections you get through without pausing,
+// learned, plus any you added by hand). In a test run the lyrics are blurred; sections you get through without pausing,
 // skipping or peeking count, each song's score is saved with it, and you get results at the end.
 // The pages are components/Karaoke.tsx and components/Playlists.tsx.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePlayer } from './hooks'
 import { log, logError } from './log'
-import { loadLearnedSongs, updatePrefs, type LearnedSong, type SetSong } from './practice/storage'
+import { loadKaraokeSongs, loadPrefs, updatePrefs, type KaraokeSong, type SetSong } from './practice/storage'
 import { navigate, type Route } from './router'
 import { playTrack } from './spotify/api'
 import { playerController } from './spotify/player'
@@ -78,18 +78,16 @@ export function useSongSet() {
     if (!s || s.finished) return
     const song = s.queue[s.index]
     const passed = s.passed[song.id] ?? []
-    log('karaoke', 'song done', { title: s.title, trackId: song.id, reason, passed: passed.length, total: song.sections })
-    if (s.test) {
-      // Section counts are refreshed from the song's progress, which updates as it's played.
+    // The song's progress updates as it's played, so this also covers songs opened for the first time.
+    const sections = loadPrefs(song.id).progress?.sections ?? song.sections
+    log('karaoke', 'song done', { title: s.title, trackId: song.id, reason, passed: passed.length, total: sections })
+    if (s.test && sections > 0) {
       updatePrefs(song.id, (p) => ({
         ...p,
-        rehearsals: [
-          ...(p.rehearsals ?? []),
-          { at: Date.now(), passed: passed.length, total: p.progress?.sections ?? song.sections },
-        ],
+        rehearsals: [...(p.rehearsals ?? []), { at: Date.now(), passed: passed.length, total: sections }],
       }))
     }
-    const results = [...s.results, { song, passed }]
+    const results = [...s.results, { song: { ...song, sections }, passed }]
     const nextIndex = s.index + 1
     if (reason === 'ended set' || nextIndex >= s.queue.length) {
       log('karaoke', 'set finished', { title: s.title, songs: results.length })
@@ -155,10 +153,10 @@ export function useSongSet() {
     return queue[0].id
   }, [])
 
-  /** The karaoke set: every fully learned song, as a test. */
+  /** The karaoke set, as a test. */
   const startKaraoke = useCallback(
     (order: KaraokeOrder): string | null =>
-      start(ordered<LearnedSong>(loadLearnedSongs(), order), { title: 'Karaoke set', test: true, returnTo: { name: 'karaoke' } }),
+      start(ordered<KaraokeSong>(loadKaraokeSongs(), order), { title: 'Karaoke set', test: true, returnTo: { name: 'karaoke' } }),
     [start],
   )
 
@@ -176,7 +174,8 @@ export function useSongSet() {
     const s = stateRef.current
     const result = s?.results.find((r) => r.song.id === trackId)
     if (!s || !result) return
-    // Sections you didn't get through go back to "learning"; the song leaves the set.
+    // Sections you didn't get through go back to "learning"; the song leaves the set, even if you
+    // added it by hand.
     updatePrefs(trackId, (p) => {
       const mastery = { ...p.mastery }
       for (const [line, level] of Object.entries(mastery)) {
@@ -187,6 +186,7 @@ export function useSongSet() {
         ...p,
         mastery,
         progress: p.progress ? { ...p.progress, learned, completedAt: undefined } : p.progress,
+        karaokeChoice: undefined,
       }
     })
     log('karaoke', 'sent back to learning', { trackId, passed: result.passed.length, total: result.song.sections })

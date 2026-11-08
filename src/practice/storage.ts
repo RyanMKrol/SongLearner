@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { changedKeys, log, logDebug, logWarn } from '../log'
 import type { WordTiming } from '../lyrics/wordAlign'
+import { karaokeChoiceFor, karaokeJoinedAt } from './karaokeSet'
 import type { HideLevel } from './mask'
 
 /** 0 = not started, 1 = learning, 2 = almost, 3 = know it. */
@@ -26,6 +27,11 @@ export interface TrackPrefs {
   progress?: SongProgress
   /** Results of karaoke sets this song was part of, oldest first. */
   rehearsals?: Rehearsal[]
+  /**
+   * Your say on the karaoke set (see karaokeSet.ts): when you added the song by hand, or null if you
+   * took it out. Left unset, a song is in the set once it's fully learned.
+   */
+  karaokeChoice?: number | null
   /** When each word is sung, for the karaoke fill (see lyrics/wordAlign.ts). */
   wordTiming?: WordTiming
 }
@@ -394,8 +400,9 @@ export interface SetSong extends LibraryEntry {
   rehearsals: Rehearsal[]
 }
 
-export interface LearnedSong extends SetSong {
-  completedAt: number
+export interface KaraokeSong extends SetSong {
+  joinedAt: number
+  addedByHand: boolean
 }
 
 export function toSetSong(entry: LibraryEntry): SetSong {
@@ -403,16 +410,25 @@ export function toSetSong(entry: LibraryEntry): SetSong {
   return { ...entry, sections: prefs?.progress?.sections ?? 0, rehearsals: prefs?.rehearsals ?? [] }
 }
 
-/** Songs with every section learned: the karaoke set. Most recently learned first. */
-export function loadLearnedSongs(): LearnedSong[] {
+/** The karaoke set: fully learned songs plus any you added by hand. Most recently added first. */
+export function loadKaraokeSongs(): KaraokeSong[] {
   return loadLibrary()
     .flatMap((entry) => {
       const prefs = read<TrackPrefs>(`prefs:${entry.id}`)
-      const progress = prefs?.progress
-      if (!progress?.completedAt || progress.sections === 0 || progress.learned < progress.sections) return []
-      return [{ ...entry, completedAt: progress.completedAt, sections: progress.sections, rehearsals: prefs?.rehearsals ?? [] }]
+      const joinedAt = karaokeJoinedAt(prefs)
+      if (joinedAt === null) return []
+      return [{ ...toSetSong(entry), joinedAt, addedByHand: typeof prefs?.karaokeChoice === 'number' }]
     })
-    .sort((a, b) => b.completedAt - a.completedAt)
+    .sort((a, b) => b.joinedAt - a.joinedAt)
+}
+
+export function isInKaraokeSet(trackId: string): boolean {
+  return karaokeJoinedAt(read<TrackPrefs>(`prefs:${trackId}`)) !== null
+}
+
+/** Adds a song to the karaoke set by hand, or takes it out. */
+export function setInKaraokeSet(trackId: string, join: boolean): void {
+  updatePrefs(trackId, (p) => ({ ...p, karaokeChoice: karaokeChoiceFor(p, join, Date.now()) }))
 }
 
 /** Changes one song's prefs from outside its song screen. */

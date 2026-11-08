@@ -1,10 +1,11 @@
-// The karaoke set page: your learned songs, how to order them, and the results of a set.
+// The karaoke set page: its songs, adding and removing them, how to order them, and a set's results.
 import { useState } from 'react'
 import { formatTime, usePlayer } from '../hooks'
+import { log } from '../log'
 import type { KaraokeOrder, SongSet } from '../karaoke'
-import { loadLearnedSongs } from '../practice/storage'
+import { loadKaraokeSongs, loadLibrary, loadSavedLyrics, masterySummary, setInKaraokeSet } from '../practice/storage'
 
-/** The karaoke set page: your learned songs, how to order them, and the last set's results. */
+/** The karaoke set page: its songs, adding and removing them, how to order them, and the last set's results. */
 export function KaraokePage({
   set,
   onOpenSong,
@@ -16,12 +17,20 @@ export function KaraokePage({
 }) {
   const player = usePlayer()
   // Read fresh each time: a set's results can send songs back to learning.
-  const songs = loadLearnedSongs()
+  const songs = loadKaraokeSongs()
+  const inSet = new Set(songs.map((s) => s.id))
+  const others = loadLibrary().filter((e) => !inSet.has(e.id))
+  const [, setChanges] = useState(0)
+  const choose = (trackId: string, join: boolean) => {
+    log('karaoke', join ? 'added by hand' : 'taken out by hand', { trackId })
+    setInKaraokeSet(trackId, join)
+    setChanges((n) => n + 1)
+  }
   const [order, setOrder] = useState<KaraokeOrder>('recent')
   const ready = player.status === 'ready' && Boolean(player.deviceId)
 
   if (set.finished) {
-    const perfect = set.finished.filter((r) => r.passed.length >= r.song.sections).length
+    const perfect = set.finished.filter((r) => r.song.sections > 0 && r.passed.length >= r.song.sections).length
     return (
       <main className="home">
         <section className="home-hero">
@@ -41,9 +50,13 @@ export function KaraokePage({
                   <strong>{r.song.name}</strong>
                   <span className="muted small">{r.song.artists.join(', ')}</span>
                 </div>
-                <span className={`karaoke-score ${missed === 0 ? 'is-perfect' : ''}`}>
-                  {r.passed.length}/{r.song.sections} sections
-                </span>
+                {r.song.sections > 0 ? (
+                  <span className={`karaoke-score ${missed === 0 ? 'is-perfect' : ''}`}>
+                    {r.passed.length}/{r.song.sections} sections
+                  </span>
+                ) : (
+                  <span className="muted small">Not sung</span>
+                )}
                 {missed > 0 &&
                   (r.sentBack ? (
                     <span className="muted small">Back in learning</span>
@@ -78,15 +91,15 @@ export function KaraokePage({
       <section className="home-hero">
         <h2>Karaoke set</h2>
         <p className="muted">
-          Every song you&apos;ve fully learned, back to back, with the words hidden. Sing them from memory and see what
-          stuck.
+          Every song you&apos;ve fully learned, plus any you add here, back to back, with the words hidden. Sing them
+          from memory and see what stuck.
         </p>
         {songs.length > 0 ? (
           <div className="home-actions">
             <label className="inline-field">
               <span className="muted small">Order</span>
               <select value={order} onChange={(e) => setOrder(e.target.value as KaraokeOrder)}>
-                <option value="recent">Most recently learned first</option>
+                <option value="recent">Most recently added first</option>
                 <option value="least-rehearsed">Least recently rehearsed first</option>
                 <option value="shuffle">Shuffle</option>
               </select>
@@ -106,6 +119,7 @@ export function KaraokePage({
           <p className="muted">
             No songs here yet. A song joins the set once every section is learned: use test mode (T) on a song and
             sing each section through, or mark sections as known yourself.
+            {others.length > 0 && ' Or add songs straight away below.'}
           </p>
         )}
       </section>
@@ -124,15 +138,61 @@ export function KaraokePage({
                   </span>
                 </div>
                 <span className="muted small">
-                  Learned {new Date(song.completedAt).toLocaleDateString()}
+                  {song.addedByHand ? 'Added' : 'Learned'} {new Date(song.joinedAt).toLocaleDateString()}
                   {last
                     ? ` · last set: ${last.passed}/${last.total} on ${new Date(last.at).toLocaleDateString()}`
                     : ' · not rehearsed yet'}
                 </span>
+                <button
+                  className="btn btn-small btn-ghost karaoke-row-action"
+                  title="Take this song out of the karaoke set. Your progress on it is kept."
+                  aria-label={`Take ${song.name} out of the karaoke set`}
+                  onClick={() => choose(song.id, false)}
+                >
+                  ✕
+                </button>
               </div>
             )
           })}
         </div>
+      )}
+
+      {others.length > 0 && (
+        <section>
+          <h3 className="section-title">Add to the set</h3>
+          <div className="karaoke-results">
+            {others.map((song) => {
+              const summary = masterySummary(song.id)
+              // The set scores you on timed sections, so a song without timed lyrics has nothing to sing against.
+              const timed = loadSavedLyrics(song.id)?.synced ?? false
+              return (
+                <div key={song.id} className="karaoke-result">
+                  {song.imageUrl ? <img src={song.imageUrl} alt="" /> : <span className="art-placeholder" />}
+                  <div className="karaoke-result-text">
+                    <strong>{song.name}</strong>
+                    <span className="muted small">
+                      {song.artists.join(', ')} · {formatTime(song.durationMs)}
+                    </span>
+                  </div>
+                  <span className="muted small">
+                    {!timed
+                      ? 'Needs timed lyrics'
+                      : summary?.complete
+                        ? 'Learned, taken out of the set'
+                        : summary
+                          ? `${summary.known} of ${summary.total} sections learned`
+                          : 'Not started'}
+                  </span>
+                  {timed && (
+                    <button className="btn btn-small karaoke-row-action" onClick={() => choose(song.id, true)}>
+                      Add
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
       )}
     </main>
   )
