@@ -12,7 +12,7 @@ in the browser tab, scrolls the lyrics in time, and lets you drill the song a se
 - Splits the lyrics into sections automatically (from stanza breaks and instrumental gaps) and
   marks parts that repeat with the same letter, so the song's shape is easy to see. You can rename
   sections, move the splits, and merge a run of sections into one bigger section to learn in
-  larger chunks (and split it back later).
+  larger chunks (and split it back later). The section being sung is highlighted in the list.
 - **Loop** a section or a run of sections, with a short run-up before it and an optional pause
   between repeats.
 - Each section remembers **how many times it loops**. While "Loop sections as you play" is on, a

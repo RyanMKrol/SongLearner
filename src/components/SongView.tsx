@@ -1189,6 +1189,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
             timings={timings}
             synced={synced}
             selection={selection}
+            currentSection={sectionOfLine(currentLine)?.index ?? null}
             onSelect={selectSection}
             mastery={masteryFor}
             onMastery={(s, m) => updatePrefs((p) => ({ ...p, mastery: { ...p.mastery, [s.startLine]: m } }))}

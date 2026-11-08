@@ -1860,6 +1860,17 @@ input[type='range'] {
   background: var(--panel-2);
 }
 
+/* The section being sung, in the same pink as the current lyric. A selected row keeps its purple
+   box, so you can see both at once. */
+.section-row.is-current {
+  background: var(--accent-soft);
+  border-color: rgba(255, 79, 139, 0.5);
+}
+
+.section-row.is-current .section-row-name {
+  color: var(--accent);
+}
+
 .section-row.is-selected {
   background: var(--loop-soft);
   border-color: rgba(139, 123, 255, 0.5);

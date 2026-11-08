@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatTime } from '../hooks'
 import type { Section, SectionTiming } from '../lyrics/sections'
 import type { LoopStatus } from '../playback/loop'
@@ -20,6 +20,8 @@ interface Props {
   timings: (SectionTiming | null)[]
   synced: boolean
   selection: { from: number; to: number } | null
+  /** The section being sung right now, if any. */
+  currentSection: number | null
   onSelect: (index: number, extend: boolean) => void
   mastery: (section: Section) => Mastery
   onMastery: (section: Section, value: Mastery) => void
@@ -56,6 +58,20 @@ export function SectionPanel(props: Props) {
   const [renaming, setRenaming] = useState<number | null>(null)
   // Touch screens have no Shift-click: this makes the next tap extend the selection instead.
   const [extending, setExtending] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+  const currentRowRef = useRef<HTMLDivElement>(null)
+
+  // Keep the current section in view as the song moves on, scrolling only the list itself so the
+  // rest of the panel stays where you left it.
+  useEffect(() => {
+    const list = listRef.current
+    const row = currentRowRef.current
+    if (!list || !row || renaming !== null) return
+    const listBox = list.getBoundingClientRect()
+    const rowBox = row.getBoundingClientRect()
+    if (rowBox.top >= listBox.top && rowBox.bottom <= listBox.bottom) return
+    list.scrollBy({ top: rowBox.top - listBox.top - (listBox.height - rowBox.height) / 2, behavior: 'smooth' })
+  }, [props.currentSection, renaming])
 
   const sel = selection ?? null
   const selName =
@@ -126,17 +142,20 @@ export function SectionPanel(props: Props) {
         </div>
       )}
 
-      <div className="section-list">
+      <div className="section-list" ref={listRef}>
         {sections.map((section) => {
           const timing = timings[section.index]
           const selected = sel !== null && section.index >= sel.from && section.index <= sel.to
           const mastery = props.mastery(section)
           const hide = props.hide(section)
           const savedReps = props.savedLoopReps(section)
+          const current = section.index === props.currentSection
           return (
             <div
               key={section.startLine}
-              className={`section-row ${selected ? 'is-selected' : ''}`}
+              ref={current ? currentRowRef : null}
+              className={`section-row ${current ? 'is-current' : ''} ${selected ? 'is-selected' : ''}`}
+              aria-current={current ? 'true' : undefined}
               onClick={(e) => {
                 props.onSelect(section.index, e.shiftKey || extending)
                 setExtending(false)
