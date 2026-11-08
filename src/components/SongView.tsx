@@ -27,6 +27,7 @@ import {
   truncate,
   type Section,
 } from '../lyrics/sections'
+import { commonReps } from '../playback/autoLoop'
 import { buildUpPlan, chainPlan } from '../playback/loop'
 import { estimateOffset, MIN_HITS } from '../playback/calibrate'
 import { karaokeChoiceFor, karaokeJoinedAt } from '../practice/karaokeSet'
@@ -497,32 +498,27 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
   )
   const masteryFor = useCallback((s: Section): Mastery => prefs.mastery[s.startLine] ?? 0, [prefs.mastery])
 
-  // How many times each section (or run of sections) is looped is remembered for the song.
-  const repsKey = useCallback(
-    (from: number, to: number): string | null => {
-      const first = sections[from]
-      const last = sections[to]
-      if (!first || !last) return null
-      return from === to ? String(first.startLine) : `${first.startLine}-${last.startLine}`
-    },
-    [sections],
-  )
-  const loopRepsFor = useCallback(
-    (from: number, to: number): number | null => {
-      const key = repsKey(from, to)
+  // How many times each section is looped is remembered for the song.
+  const sectionReps = useCallback(
+    (index: number): number | null => {
+      const first = sections[index]
       // Sections with nothing saved play once.
-      const saved = key === null ? undefined : prefs.loopReps?.[key]
+      const saved = first && prefs.loopReps?.[first.startLine]
       return saved === undefined ? 1 : saved
     },
-    [repsKey, prefs.loopReps],
+    [sections, prefs.loopReps],
   )
+  const runReps = useCallback(
+    (from: number, to: number) => commonReps(sections.slice(from, to + 1).map((s) => sectionReps(s.index))),
+    [sections, sectionReps],
+  )
+  /** Sets the count for every section from..to. */
   const saveLoopReps = useCallback(
     (from: number, to: number, reps: number | null) => {
-      const key = repsKey(from, to)
-      if (key === null || prefs.loopReps?.[key] === reps) return
-      updatePrefs((p) => ({ ...p, loopReps: { ...p.loopReps, [key]: reps } }))
+      const counts = Object.fromEntries(sections.slice(from, to + 1).map((s) => [s.startLine, reps]))
+      updatePrefs((p) => ({ ...p, loopReps: { ...p.loopReps, ...counts } }))
     },
-    [repsKey, prefs.loopReps, updatePrefs],
+    [sections, updatePrefs],
   )
 
   // Practice actions.
@@ -540,28 +536,28 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
       if (!synced || sections.length === 0) return
       playerController.activate()
       setSelection({ from, to })
-      // Asking to loop something set to play once loops it until stopped.
-      const reps = loopRepsFor(from, to)
-      startPractice(chainPlan(songTimings, from, to, reps === 1 ? null : reps), settings, selectNext)
+      // Asking to loop something set to play once, or a run with different counts, loops it until stopped.
+      const reps = runReps(from, to)
+      startPractice(chainPlan(songTimings, from, to, reps === 1 || reps === 'mixed' ? null : reps), settings, selectNext)
     },
-    [synced, sections.length, songTimings, settings, startPractice, loopRepsFor, selectNext],
+    [synced, sections.length, songTimings, settings, startPractice, runReps, selectNext],
   )
 
   // Sections set to loop more than once loop by themselves when playback reaches them.
   const autoSpans = useMemo(
     () =>
       songTimings.map((t, i) => {
-        const reps = loopRepsFor(i, i)
+        const reps = sectionReps(i)
         return { ...t, loops: reps !== null && reps > 1 }
       }),
-    [songTimings, loopRepsFor],
+    [songTimings, sectionReps],
   )
   const autoLoop = useCallback(
     (i: number) => {
       setSelection({ from: i, to: i })
-      startPractice(chainPlan(songTimings, i, i, loopRepsFor(i, i)), settings, selectNext, true)
+      startPractice(chainPlan(songTimings, i, i, sectionReps(i)), settings, selectNext, true)
     },
-    [songTimings, loopRepsFor, settings, startPractice, selectNext],
+    [songTimings, sectionReps, settings, startPractice, selectNext],
   )
   const suppressAutoLoop = useAutoLoop(
     settings.autoLoop && synced && !testMode && !karaoke,
@@ -1232,7 +1228,7 @@ export function SongView({ track, karaoke = null }: { track: PlayerTrack; karaok
               setSettings(next)
             }}
             onLoop={loop}
-            loopReps={loopRepsFor}
+            loopReps={runReps}
             onLoopReps={saveLoopReps}
             savedLoopReps={(sec) => prefs.loopReps?.[String(sec.startLine)]}
             onBuildUp={buildUp}

@@ -17,7 +17,7 @@ export interface TrackPrefs {
   sectionNames: Record<number, string>
   mastery: Record<number, Mastery>
   hide: Record<number, HideLevel>
-  /** How many times to loop a section, or null for forever. Keyed by start line, or "from-to" start lines for a run. */
+  /** How many times to loop a section, or null for forever. Keyed by start line. */
   loopReps?: Record<string, number | null>
   /** Romaji corrections for this song: original word → how it's sung. */
   readings?: Record<string, string>

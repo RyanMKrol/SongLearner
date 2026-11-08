@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AutoLoopWatcher } from '../playback/autoLoop'
+import { AutoLoopWatcher, commonReps } from '../playback/autoLoop'
 import { LoopController, chainPlan } from '../playback/loop'
 
 const spans = [
@@ -48,6 +48,19 @@ describe('AutoLoopWatcher', () => {
     expect(w.tick(20_100)).toBeNull()
     expect(w.tick(9_500)).toBeNull()
     expect(w.tick(10_020)).toBe(1)
+  })
+})
+
+describe('commonReps', () => {
+  it('gives the count all the sections share', () => {
+    expect(commonReps([3])).toBe(3)
+    expect(commonReps([3, 3, 3])).toBe(3)
+    expect(commonReps([null, null])).toBeNull()
+  })
+
+  it('says so when they differ', () => {
+    expect(commonReps([3, 1])).toBe('mixed')
+    expect(commonReps([3, null])).toBe('mixed')
   })
 })
 

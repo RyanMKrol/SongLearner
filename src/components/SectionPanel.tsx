@@ -36,8 +36,8 @@ interface Props {
   settings: PracticeSettings
   onSettings: (s: PracticeSettings) => void
   onLoop: (from: number, to: number) => void
-  /** Times sections from..to will loop: what's saved for them, or the default. */
-  loopReps: (from: number, to: number) => number | null
+  /** Times sections from..to each loop: what's saved for them or the default, or 'mixed' if they differ. */
+  loopReps: (from: number, to: number) => number | null | 'mixed'
   onLoopReps: (from: number, to: number, reps: number | null) => void
   /** What's saved for one section, if anything. */
   savedLoopReps: (section: Section) => number | null | undefined
@@ -288,9 +288,14 @@ export function SectionPanel(props: Props) {
               <select
                 value={(sel ? props.loopReps(sel.from, sel.to) : 1) ?? 0}
                 disabled={!sel}
-                title="Saved for the selected section. With “Loop sections as you play” on, sections set above 1× loop by themselves when the song reaches them."
+                title="Saved for each selected section. With “Loop sections as you play” on, each section set above 1× loops by itself when the song reaches it."
                 onChange={(e) => sel && props.onLoopReps(sel.from, sel.to, Number(e.target.value) || null)}
               >
+                {sel && props.loopReps(sel.from, sel.to) === 'mixed' && (
+                  <option value="mixed" disabled>
+                    mixed
+                  </option>
+                )}
                 <option value={0}>forever</option>
                 {[1, 2, 3, 5, 10].map((n) => (
                   <option key={n} value={n}>

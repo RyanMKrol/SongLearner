@@ -10,6 +10,11 @@ export interface AutoLoopSpan {
   loops: boolean
 }
 
+/** The count shared by a run of sections, or 'mixed' if they differ. */
+export function commonReps(reps: (number | null)[]): number | null | 'mixed' {
+  return reps.every((r) => r === reps[0]) ? (reps[0] ?? null) : 'mixed'
+}
+
 /** Only count arriving near a section's start; jumping into the middle of one doesn't loop it. */
 const START_WINDOW_MS = 1500
 
